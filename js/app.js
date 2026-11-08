@@ -102,7 +102,7 @@
   }
 
   // ---------- sinkron Google Sheets ----------
-  var syncState = 'wait', syncing = false;
+  var syncState = 'wait', syncing = false, codeOld = false;
   function connected() { return server ? !!pin : !!sheetUrl; }
   function api(method, body, extra) {
     if (server) {
@@ -143,6 +143,15 @@
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || 'gagal');
         var changed = false;
+        codeOld = j.v !== 2;
+        // sekali saja setelah kode Sheets v2: buang data lokal yang dulu terpulihkan ke tanggal yang salah
+        if (!codeOld && !load('ah-fix1', false)) {
+          var keep = {};
+          queue.forEach(function (o) { keep[o.date] = keep[o.date] || {}; keep[o.date][o.id] = data[o.date] && data[o.date][o.id]; });
+          data = {};
+          Object.keys(keep).forEach(function (d) { Object.keys(keep[d]).forEach(function (id) { if (keep[d][id]) { data[d] = data[d] || {}; data[d][id] = keep[d][id]; } }); });
+          save('ah-fix1', true); changed = true;
+        }
         (j.rows || []).forEach(function (r) {
           var k = r[0], id = r[1]; if (!knownId(id)) return;
           var local = data[k] && data[k][id];
@@ -167,7 +176,9 @@
     var txt = syncState === 'ok' ? 'Tersimpan di Google Sheets'
       : syncState === 'wait' ? (queue.length ? queue.length + ' perubahan menunggu dikirim' : 'Menyambungkan…')
       : (server ? 'Masukkan PIN untuk menyambungkan' : 'Belum tersambung ke Google Sheets');
-    el.className = 'sync ' + syncState;
+    var cls = syncState;
+    if (codeOld && syncState === 'ok') { cls = 'old'; txt = 'Kode Google Sheets perlu diperbarui (lihat Pengaturan)'; }
+    el.className = 'sync ' + cls;
     el.innerHTML = '<i></i><span>' + txt + '</span>' + (syncState === 'off' ? (server ? ' <button id="enter-pin">Masukkan PIN</button>' : ' <button data-go="settings">Sambungkan</button>') : '');
   }
 
