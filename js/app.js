@@ -4,6 +4,26 @@
   var ITEM = {}; ITEMS.forEach(function (it) { ITEM[it.id] = it; });
   var WAJIB = ITEMS.filter(function (i) { return i.wajib; }).map(function (i) { return i.id; });
   var DZIKIR = ITEMS.filter(function (i) { return i.group === 'dzikir'; }).map(function (i) { return i.id; });
+  var PETANG = ITEMS.filter(function (i) { return i.group === 'petang'; }).map(function (i) { return i.id; });
+  var DZ_SHOLAT = ITEMS.filter(function (i) { return i.phases; }).map(function (i) { return i.id; });
+  var G = AH_GUIDE, HAFAL_DATE = '2000-01-01';
+  G.READ.dz_salam = ITEM.dzikir_subuh.parts[1]; G.READ.dz_kursi = ITEM.dzikir_subuh.parts[2]; G.READ.dz_penutup = ITEM.dzikir_subuh.parts[4];
+  function isFriday(k) { return parse(k).getDay() === 5; }
+  // item versi tanggal tertentu (hari Jumat: Zuhur → Jumat, dst.)
+  function itemDef(k, id) {
+    var it = ITEM[id];
+    if (it && it.friday && isFriday(k)) { var x = {}; for (var p in it) x[p] = it[p]; for (var q in it.friday) x[q] = it.friday[q]; return x; }
+    return it;
+  }
+  function itemsFor(k) {
+    var dow = parse(k).getDay();
+    return ITEMS.filter(function (it) {
+      if (it.days && it.days.indexOf(dow) < 0) return false;
+      if (it.notFriday && dow === 5) return false;
+      return true;
+    }).map(function (it) { return itemDef(k, it.id); });
+  }
+  function knownId(id) { return !!ITEM[id] || id.indexOf('hafal:') === 0; }
   var HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   var HARI3 = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
   var BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -42,18 +62,19 @@
     if (k < t) return 'late';
     if (k > t) return 'belum';
     var g = groupOf(id), pt = Prayer.times(parse(k)), m = nowMin();
+    var end = ITEM[id].end ? ITEM[id].end(pt) : g.end(pt);
     if (m < g.start(pt)) return 'belum';
-    if (m >= g.end(pt)) return 'late';
+    if (m >= end) return 'late';
     return 'now';
   }
   function dayStats(k) {
-    var done = 0, wajib = 0, missed = [];
-    ITEMS.forEach(function (it) {
+    var done = 0, wajib = 0, missed = [], list = itemsFor(k);
+    list.forEach(function (it) {
       var s = status(k, it.id);
       if (s === 'done') { done++; if (it.wajib) wajib++; }
       if (s === 'late') missed.push(it.id);
     });
-    return { done: done, total: ITEMS.length, wajib: wajib, missed: missed, pct: done / ITEMS.length };
+    return { done: done, total: list.length, wajib: wajib, missed: missed, pct: list.length ? done / list.length : 0 };
   }
 
   function setDone(k, id, val, note) {
@@ -61,9 +82,14 @@
     var rec = { d: val ? 1 : 0, n: note !== undefined ? note : (cur.n || ''), ts: Date.now() };
     data[k] = data[k] || {}; data[k][id] = rec; save('ah-data', data);
     queue = queue.filter(function (o) { return !(o.date === k && o.id === id); });
-    queue.push({ date: k, id: id, name: ITEM[id].name, done: rec.d, note: rec.n, ts: rec.ts });
+    queue.push({ date: k, id: id, name: opName(k, id), done: rec.d, note: rec.n, ts: rec.ts });
     save('ah-queue', queue);
     flush();
+  }
+
+  function opName(k, id) {
+    if (id.indexOf('hafal:') === 0) { var r = G.READ[id.slice(6)]; return 'Hafalan: ' + (r ? r.label : id.slice(6)); }
+    return itemDef(k, id).name;
   }
 
   // ---------- sinkron Google Sheets ----------
@@ -82,8 +108,8 @@
   }
   function queueAllLocal() {
     Object.keys(data).forEach(function (d) { Object.keys(data[d]).forEach(function (id) {
-      if (!ITEM[id]) return; var r = data[d][id];
-      if (!queue.some(function (o) { return o.date === d && o.id === id; })) queue.push({ date: d, id: id, name: ITEM[id].name, done: r.d, note: r.n || '', ts: r.ts || Date.now() });
+      if (!knownId(id)) return; var r = data[d][id];
+      if (!queue.some(function (o) { return o.date === d && o.id === id; })) queue.push({ date: d, id: id, name: opName(d, id), done: r.d, note: r.n || '', ts: r.ts || Date.now() });
     }); });
     save('ah-queue', queue);
   }
@@ -109,11 +135,11 @@
         if (!j.ok) throw new Error(j.error || 'gagal');
         var changed = false;
         (j.rows || []).forEach(function (r) {
-          var k = r[0], id = r[1]; if (!ITEM[id]) return;
+          var k = r[0], id = r[1]; if (!knownId(id)) return;
           var local = data[k] && data[k][id];
           if (!local || (r[4] || 0) > (local.ts || 0)) {
             data[k] = data[k] || {}; data[k][id] = { d: r[2] ? 1 : 0, n: r[3] || '', ts: r[4] || 0 }; changed = true;
-            if (k < firstDay) { firstDay = k; save('ah-first', firstDay); }
+            if (k !== HAFAL_DATE && k < firstDay) { firstDay = k; save('ah-first', firstDay); }
           }
         });
         if (changed) save('ah-data', data);
@@ -172,7 +198,7 @@
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
   function header() {
-    var d = new Date(), titles = { today: 'Hari Ini', bacaan: 'Bacaan', riwayat: 'Riwayat', settings: 'Pengaturan' };
+    var d = new Date(), titles = { today: 'Hari Ini', bacaan: 'Bacaan', panduan: 'Panduan', riwayat: 'Riwayat', settings: 'Pengaturan' };
     $('title').textContent = titles[view];
     var h = hijri(d);
     $('date').textContent = longDate(d) + (h ? ' · ' + h : '');
@@ -188,17 +214,20 @@
     var note = data[k] && data[k][it.id] && data[k][it.id].n;
     return '<div class="row ' + s + '">' +
       '<button class="cb" data-toggle="' + it.id + '" data-date="' + k + '" aria-label="Centang ' + esc(it.name) + '"><span>' + (s === 'done' ? '✓' : '') + '</span></button>' +
-      '<button class="name" data-open="' + it.id + '" data-date="' + k + '">' + esc(it.name) + (note ? '<span class="sub-note">' + esc(note) + '</span>' : '') + '</button>' +
+      '<button class="name" data-open="' + it.id + '" data-date="' + k + '">' + esc(it.name) +
+        (it.rakaat ? '<span class="sub-note">' + esc(it.rakaat) + '</span>' : '') +
+        (note ? '<span class="sub-note">' + esc(note) + '</span>' : '') + '</button>' +
       (tags ? '<span class="tags">' + tags + '</span>' : '') + '</div>';
   }
 
   function checklistHtml(k, highlight) {
-    var pt = Prayer.times(parse(k)), m = nowMin(), html = '';
+    var pt = Prayer.times(parse(k)), m = nowMin(), html = '', list = itemsFor(k), fri = isFriday(k);
     GROUPS.forEach(function (g) {
-      var items = ITEMS.filter(function (i) { return i.group === g.id; });
+      var items = list.filter(function (i) { return i.group === g.id; });
+      if (!items.length) return;
       var done = items.filter(function (i) { return isDone(k, i.id); }).length;
-      var isNow = highlight && g.id !== 'harian' && m >= g.start(pt) && m < g.end(pt) && done < items.length;
-      var label = g.title + ' · ' + g.when(pt);
+      var isNow = highlight && g.id !== 'harian' && g.id !== 'puasa' && m >= g.start(pt) && m < g.end(pt) && done < items.length;
+      var label = (fri && g.fridayTitle ? g.fridayTitle : g.title) + ' · ' + g.when(pt);
       var right = (highlight && m < g.start(pt) && g.id !== 'malam') ? 'belum waktunya' : done + '/' + items.length;
       html += '<div class="group' + (isNow ? ' now' : '') + '" id="g-' + g.id + '"><div class="ghead"><span>' + esc(label) + '</span><span class="n">' + right + '</span></div>' +
         items.map(function (it) { return rowHtml(k, it); }).join('') + '</div>';
@@ -216,6 +245,7 @@
   var tahajudDone = function (k) { return isDone(k, 'tahajud'); };
   var dzikirDone = function (k) { return DZIKIR.every(function (id) { return isDone(k, id); }); };
   var sedekahDone = function (k) { return isDone(k, 'sedekah'); };
+  var petangDone = function (k) { return PETANG.every(function (id) { return isDone(k, id); }); };
 
   function renderToday() {
     var k = todayKey(), st = dayStats(k);
@@ -233,19 +263,101 @@
   function renderBacaan() {
     var pt = Prayer.times(new Date());
     var html = '<p class="note">Ketuk "Buka" untuk menandai selesai atau memakai penghitung dzikir. Kalau berjamaah sebagai makmum, tambahkan <i>ma\'muuman</i> sebelum <i>lillaahi ta\'aalaa</i>.</p>';
+    var tk = todayKey(), dow = new Date().getDay();
     GROUPS.forEach(function (g) {
       html += '<div class="read-group" id="r-' + g.id + '"><h2>' + esc(g.title) + '<small>' + esc(g.when(pt)) + '</small></h2>';
       ITEMS.filter(function (i) { return i.group === g.id; }).forEach(function (it) {
-        it.parts.forEach(function (p, idx) {
-          html += '<div class="part"><span class="label">' + esc(p.label) + '</span>' +
-            (it.id === 'sedekah' ? '' : '<p class="lafaz">' + esc(p.lafaz) + '</p>') +
+        if (it.phases) {
+          html += '<div class="part"><span class="label">' + esc(it.name) + '</span><p class="arti">Istighfar, doa keselamatan, Ayat Kursi, tasbih-tahmid-takbir 33×, dan penutup.</p>' +
+            '<div class="btn-row"><button class="open-btn" data-open="' + it.id + '" data-date="' + tk + '">Buka penghitung</button><button class="open-btn" data-guide="dzikir">Lihat bacaan lengkap</button></div></div>';
+          return;
+        }
+        var parts = it.parts.slice();
+        if (it.friday) parts = parts.concat(it.friday.parts.map(function (p) { return { label: 'Hari Jumat · ' + p.label, lafaz: p.lafaz, arti: p.arti, note: p.note }; }));
+        var today = !it.days || it.days.indexOf(dow) >= 0;
+        parts.forEach(function (p, idx) {
+          html += '<div class="part"><span class="label">' + esc(p.label) + (it.rakaat && idx === 0 ? ' · ' + esc(it.rakaat) : '') + '</span>' +
+            (it.id === 'sedekah' || it.id === 'kahfi' ? '' : '<p class="lafaz">' + esc(p.lafaz) + '</p>') +
             '<p class="arti">' + esc(p.arti) + '</p>' + (p.note ? '<p class="note">' + esc(p.note) + '</p>' : '') +
-            (idx === it.parts.length - 1 ? '<button class="open-btn" data-open="' + it.id + '" data-date="' + todayKey() + '">' + (it.count ? 'Buka penghitung' : 'Buka') + '</button>' : '') + '</div>';
+            (idx === parts.length - 1 ? '<div class="btn-row">' +
+              (today ? '<button class="open-btn" data-open="' + it.id + '" data-date="' + tk + '">' + (it.count ? 'Buka penghitung' : 'Buka') + '</button>' : '') +
+              (it.link ? '<a class="open-btn" href="' + it.link + '" target="_blank" rel="noopener">Buka surat (latin + arti)</a>' : '') +
+              (it.guide ? '<button class="open-btn" data-guide="sholat" data-sholat="' + it.guide + '">Panduan sholat</button>' : '') + '</div>' : '') + '</div>';
         });
       });
       html += '</div>';
     });
     $('view-bacaan').innerHTML = html;
+  }
+
+  // ---------- panduan ----------
+  var gTab = load('ah-gtab', 'sholat'), gSholat = 'subuh', qunut = load('ah-qunut', true), hafalMode = false, revealed = {};
+  function hafal(key) { return isDone(HAFAL_DATE, 'hafal:' + key); }
+  function readBlock(key, opts) {
+    var r = G.READ[key]; opts = opts || {};
+    var blur = hafalMode && !revealed[key];
+    var canHafal = G.HAFALAN.indexOf(key) >= 0;
+    return '<div class="read' + (blur ? ' hide' : '') + '">' + (opts.noLabel ? '' : '<span class="label">' + esc(r.label) + '</span>') +
+      '<p class="lafaz" data-reveal="' + key + '">' + esc(r.lafaz) + '</p>' +
+      (blur ? '<p class="note">Ketuk untuk melihat bacaan</p>' : '') +
+      '<p class="arti">' + esc(r.arti) + '</p>' + (r.note ? '<p class="note">' + esc(r.note) + '</p>' : '') +
+      (canHafal ? '<button class="hafal-btn' + (hafal(key) ? ' on' : '') + '" data-hafal="' + key + '">' + (hafal(key) ? '✓ Sudah hafal' : 'Tandai sudah hafal') + '</button>' : '') + '</div>';
+  }
+  function renderPanduan() {
+    var hafalCount = G.HAFALAN.filter(hafal).length;
+    var html = '<div class="seg">' + [['sholat', 'Sholat'], ['wudhu', 'Wudhu'], ['dzikir', 'Dzikir']].map(function (t) {
+      return '<button class="' + (gTab === t[0] ? 'on' : '') + '" data-gtab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="hafal-bar"><button class="switch' + (hafalMode ? ' on' : '') + '" id="hafal-mode" role="switch" aria-checked="' + hafalMode + '"><i></i></button>' +
+      '<div><b>Mode hafalan</b><span>Sembunyikan bacaan latin untuk menguji hafalan · ' + hafalCount + '/' + G.HAFALAN.length + ' sudah hafal</span></div></div>';
+
+    if (gTab === 'sholat') {
+      var sh = G.SHOLAT.filter(function (x) { return x.id === gSholat; })[0];
+      html += '<div class="chips-row">' + G.SHOLAT.map(function (x) {
+        return '<button class="chip' + (x.id === gSholat ? ' on' : '') + '" data-sholat="' + x.id + '">' + x.name + ' <small>' + x.n + '</small></button>'; }).join('') + '</div>';
+      if (sh.id === 'subuh') html += '<label class="check-row"><input type="checkbox" id="qunut"' + (qunut ? ' checked' : '') + '> Pakai doa qunut di rakaat ke-2</label>';
+      html += '<p class="note">' + (sh.jahr ? 'Al-Fatihah dan surat di rakaat 1–2 dibaca keras kalau sholat sendiri atau menjadi imam; rakaat 3–4 dibaca pelan.' : sh.id === 'sunnah' ? 'Sholat sunnah dikerjakan 2 rakaat sekali salam dan dibaca pelan. Niatnya ada di tab Bacaan.' : 'Semua bacaan dibaca pelan.') +
+        ' Panduan ini untuk belajar dan menghafal sebelum sholat.</p>';
+      var seq = G.sequence(sh.n, sh.id === 'subuh' && qunut), seen = {};
+      seq.forEach(function (steps, i) {
+        html += '<div class="card rakaat"><h3>Rakaat ' + (i + 1) + (i === seq.length - 1 ? ' <small>terakhir</small>' : '') + '</h3><ol class="gsteps">';
+        steps.forEach(function (sid) {
+          var g = G.GERAK[sid], body = '';
+          if (sid === 'niat') {
+            if (sh.item) { var p = ITEM[sh.item].parts[0]; body = '<div class="read"><p class="lafaz">' + esc(p.lafaz) + '</p><p class="arti">' + esc(p.arti) + '</p></div>'; }
+            else body = '<p class="note">Niat sesuai sholat sunnah yang dikerjakan (lihat tab Bacaan).</p>';
+          } else if (g.surat) {
+            body = ['ikhlas', 'falaq', 'nas', 'kafirun'].map(function (s) {
+              return '<details' + (!seen['s_' + s] && s === 'ikhlas' && i === 0 ? ' open' : '') + '><summary>' + esc(G.READ[s].label) + (hafal(s) ? ' ✓' : '') + '</summary>' + readBlock(s, { noLabel: true }) + '</details>';
+            }).join('');
+            seen.s_ikhlas = true;
+          } else if (g.read) {
+            if (seen[g.read]) body = '<details><summary>' + esc(G.READ[g.read].label) + ' · sama seperti sebelumnya</summary>' + readBlock(g.read, { noLabel: true }) + '</details>';
+            else { body = readBlock(g.read); seen[g.read] = true; }
+          }
+          html += '<li><b>' + esc(g.name) + '</b><span class="how">' + esc(g.how) + '</span>' + body + '</li>';
+        });
+        html += '</ol></div>';
+      });
+      html += '<p class="note" style="margin-top:12px">Setelah salam, lanjutkan dengan dzikir setelah sholat (tab Dzikir).</p>';
+    }
+
+    if (gTab === 'wudhu') {
+      html += '<div class="card"><h3>Urutan wudhu</h3><ol class="gsteps">' + G.WUDHU.map(function (w) {
+        return '<li><b>' + esc(w.name) + '</b>' + (w.wajib ? '<span class="tag w" style="margin-left:0;align-self:flex-start">Wajib</span>' : '<span class="how">Sunnah</span>') + (w.read ? readBlock(w.read) : '') + '</li>';
+      }).join('') + '</ol><p class="note">Urutannya harus tertib. Yang bertanda wajib tidak boleh terlewat.</p></div>' +
+        '<div class="card"><h3>Yang membatalkan wudhu</h3><ul class="plain">' + G.PEMBATAL.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>';
+    }
+
+    if (gTab === 'dzikir') {
+      var parts = ITEM.dzikir_subuh.parts;
+      html += '<div class="card"><h3>Dzikir setelah sholat wajib</h3><p class="note">Dibaca setelah salam di setiap sholat wajib. Penghitung 33× ada di checklist Hari Ini (ketuk "Dzikir setelah …").</p><ol class="gsteps">' +
+        '<li><b>' + esc(parts[0].label) + '</b><div class="read"><p class="lafaz">' + esc(parts[0].lafaz) + '</p><p class="arti">' + esc(parts[0].arti) + '</p></div></li>' +
+        '<li><b>' + esc(parts[1].label) + '</b>' + readBlock('dz_salam', { noLabel: true }) + '</li>' +
+        '<li><b>' + esc(parts[2].label) + '</b>' + readBlock('dz_kursi', { noLabel: true }) + '</li>' +
+        '<li><b>' + esc(parts[3].label) + '</b><div class="read"><p class="lafaz">' + esc(parts[3].lafaz) + '</p><p class="arti">' + esc(parts[3].arti) + '</p></div></li>' +
+        '<li><b>' + esc(parts[4].label) + '</b>' + readBlock('dz_penutup', { noLabel: true }) + '</li></ol></div>';
+    }
+    $('view-panduan').innerHTML = html;
   }
 
   var weekOffset = 0, monthOffset = 0;
@@ -273,7 +385,9 @@
       '<div class="bars">' + bars + '</div>' +
       '<div class="stats"><div class="stat"><b>' + wajibDone + '/' + (counted.length * 5) + '</b>Sholat wajib</div>' +
       '<div class="stat"><b>' + sum(function (k) { return tahajudDone(k) ? 1 : 0; }) + '/' + counted.length + '</b>Tahajud</div>' +
+      '<div class="stat"><b>' + sum(function (k) { return DZ_SHOLAT.filter(function (id) { return isDone(k, id); }).length; }) + '/' + (counted.length * 5) + '</b>Dzikir setelah sholat</div>' +
       '<div class="stat"><b>' + sum(function (k) { return dzikirDone(k) ? 1 : 0; }) + '/' + counted.length + '</b>Dzikir pagi lengkap</div>' +
+      '<div class="stat"><b>' + sum(function (k) { return petangDone(k) ? 1 : 0; }) + '/' + counted.length + '</b>Dzikir petang lengkap</div>' +
       '<div class="stat"><b>' + sum(function (k) { return sedekahDone(k) ? 1 : 0; }) + '/' + counted.length + '</b>Sedekah</div></div>' +
       '<div class="missed">' + (top.length ? 'Paling sering terlewat: ' + top.map(function (id) { return '<span>' + esc(ITEM[id].name) + ' (' + miss[id] + '×)</span>'; }).join(', ') : (counted.length ? 'Belum ada yang terlewat minggu ini.' : 'Belum ada data untuk minggu ini.')) + '</div></div>';
 
@@ -281,7 +395,9 @@
       '<div class="stat"><b>' + streak(allWajib) + ' hari</b>Sholat 5 waktu lengkap</div>' +
       '<div class="stat"><b>' + streak(tahajudDone) + ' hari</b>Tahajud</div>' +
       '<div class="stat"><b>' + streak(dzikirDone) + ' hari</b>Dzikir pagi lengkap</div>' +
-      '<div class="stat"><b>' + streak(sedekahDone) + ' hari</b>Sedekah</div></div></div>';
+      '<div class="stat"><b>' + streak(petangDone) + ' hari</b>Dzikir petang lengkap</div>' +
+      '<div class="stat"><b>' + streak(sedekahDone) + ' hari</b>Sedekah</div>' +
+      '<div class="stat"><b>' + G.HAFALAN.filter(hafal).length + '/' + G.HAFALAN.length + '</b>Bacaan sudah hafal</div></div></div>';
 
     var base = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
     var startPad = (base.getDay() + 6) % 7, dim = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
@@ -342,10 +458,11 @@
 
   function render() {
     header();
-    ['today', 'bacaan', 'riwayat', 'settings'].forEach(function (v) { $('view-' + v).hidden = v !== view; });
+    ['today', 'bacaan', 'panduan', 'riwayat', 'settings'].forEach(function (v) { $('view-' + v).hidden = v !== view; });
     document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('on', t.dataset.view === view); });
     if (view === 'today') renderToday();
     if (view === 'bacaan') renderBacaan();
+    if (view === 'panduan') renderPanduan();
     if (view === 'riwayat') renderRiwayat();
     if (view === 'settings') renderSettings();
   }
@@ -358,20 +475,33 @@
 
   // ---------- lembar detail ----------
   var sheetCtx = null;
+  function counterHtml(it, c) {
+    var sub;
+    if (it.phases) {
+      var left = c, ph = it.phases[0], idx = 0;
+      while (idx < it.phases.length - 1 && left >= it.phases[idx][0]) { left -= it.phases[idx][0]; idx++; }
+      ph = it.phases[idx];
+      sub = (c >= it.count ? 'selesai · ' : Math.min(left, ph[0]) + '/' + ph[0] + ' · ') + ph[1];
+    } else sub = 'dari ' + it.count + ' · ketuk';
+    return '<b id="cnum">' + c + '</b><small id="csub">' + esc(sub) + '</small>';
+  }
   function openItem(id, k) {
-    var it = ITEM[id]; sheetCtx = { type: 'item', id: id, date: k };
+    var it = itemDef(k, id); sheetCtx = { type: 'item', id: id, date: k };
     var done = isDone(k, id), g = groupOf(id), isToday = k === todayKey();
-    var html = '<div class="eyebrow" id="sheet-title">' + esc(g.title) + ' · ' + esc(it.name) + (isToday ? '' : ' · ' + esc(longDate(parse(k)))) + '</div>';
+    var html = '<div class="eyebrow" id="sheet-title">' + esc(g.title) + ' · ' + esc(it.name) + (it.rakaat ? ' · ' + esc(it.rakaat) : '') + (isToday ? '' : ' · ' + esc(longDate(parse(k)))) + '</div>';
     it.parts.forEach(function (p) {
       html += '<div class="part">' + (it.parts.length > 1 ? '<span class="label">' + esc(p.label) + '</span>' : '') +
-        '<p class="lafaz">' + esc(p.lafaz) + '</p><p class="arti">' + esc(p.arti) + '</p>' + (p.note ? '<p class="note">' + esc(p.note) + '</p>' : '') + '</div>';
+        (it.id === 'kahfi' || it.id === 'sedekah' ? '<p class="lafaz">' + esc(p.label) + '</p>' : '<p class="lafaz">' + esc(p.lafaz) + '</p>') +
+        '<p class="arti">' + esc(p.arti) + '</p>' + (p.note ? '<p class="note">' + esc(p.note) + '</p>' : '') + '</div>';
     });
     if (it.count && isToday) {
       var c = (counts[k] && counts[k][id]) || 0;
-      html += '<div class="counter"><button class="round" id="round" style="--p:' + Math.min(100, c / it.count * 100) + '" aria-label="Tambah hitungan"><div><b id="cnum">' + c + '</b><small>dari ' + it.count + ' · ketuk</small></div></button>' +
+      html += '<div class="counter"><button class="round" id="round" style="--p:' + Math.min(100, c / it.count * 100) + '" aria-label="Tambah hitungan"><div>' + counterHtml(it, c) + '</div></button>' +
         '<div class="row-btns"><button class="mini" id="cminus">− 1</button><button class="mini" id="creset">Ulang</button></div>' +
-        '<p class="note">Otomatis tercentang saat mencapai ' + it.count + '.</p></div>';
+        '<p class="note">Otomatis tercentang saat mencapai ' + it.count + (it.phases ? ' (33 + 33 + 33)' : '') + '.</p></div>';
     }
+    if (it.link) html += '<a class="btn s" href="' + it.link + '" target="_blank" rel="noopener">Buka Surat Al-Kahfi (latin + arti)</a>';
+    if (it.guide && !(ITEM[id].friday && isFriday(k))) html += '<button class="btn s" data-guide="sholat" data-sholat="' + it.guide + '">Lihat panduan sholat ' + esc(it.rakaat) + '</button>';
     if (it.noteField) {
       var nv = (data[k] && data[k][id] && data[k][id].n) || '';
       html += '<div class="field"><label for="note">Catatan (opsional)</label><textarea id="note" placeholder="Misalnya: kotak amal masjid">' + esc(nv) + '</textarea></div>';
@@ -393,13 +523,13 @@
   function closeSheet() { $('sheet').hidden = true; document.body.style.overflow = ''; sheetCtx = null; render(); }
 
   function bump(delta, reset) {
-    var c = sheetCtx, it = ITEM[c.id], k = c.date;
+    var c = sheetCtx, it = itemDef(c.date, c.id), k = c.date;
     counts = load('ah-count', counts);
     Object.keys(counts).forEach(function (d) { if (d < key(addDays(new Date(), -7))) delete counts[d]; });
     counts[k] = counts[k] || {};
     var v = reset ? 0 : Math.max(0, (counts[k][c.id] || 0) + delta);
     counts[k][c.id] = v; save('ah-count', counts);
-    $('cnum').textContent = v; $('round').style.setProperty('--p', Math.min(100, v / it.count * 100));
+    $('round').firstChild.innerHTML = counterHtml(it, v); $('round').style.setProperty('--p', Math.min(100, v / it.count * 100));
     if (delta > 0 && v === it.count && !isDone(k, c.id)) { setDone(k, c.id, true); toast('Alhamdulillah, ' + it.name + ' selesai'); openItem(c.id, k); }
   }
 
@@ -408,9 +538,15 @@
     clearTimeout(toast._t); toast._t = setTimeout(function () { t.hidden = true; }, 2200);
   }
 
+  function renderPanduanKeep() { var y = window.scrollY; renderPanduan(); window.scrollTo(0, y); }
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.id === 'qunut') { qunut = e.target.checked; save('ah-qunut', qunut); renderPanduanKeep(); }
+  });
+
   // ---------- event ----------
   document.addEventListener('click', function (e) {
-    var el = e.target.closest('button, [data-close]'); if (!el) return;
+    var el = e.target.closest('button, [data-close], [data-reveal]'); if (!el) return;
+    if (el.dataset.reveal) { if (hafalMode) { revealed[el.dataset.reveal] = !revealed[el.dataset.reveal]; renderPanduanKeep(); } return; }
     if (el.hasAttribute('data-close')) { closeSheet(); return; }
     if (el.dataset.view) { go(el.dataset.view); return; }
     if (el.dataset.go) { go(el.dataset.go); return; }
@@ -423,6 +559,14 @@
       return;
     }
     if (el.dataset.open) { openItem(el.dataset.open, el.dataset.date); return; }
+    if (el.dataset.guide) {
+      if (!$('sheet').hidden) { $('sheet').hidden = true; document.body.style.overflow = ''; sheetCtx = null; }
+      gTab = el.dataset.guide; save('ah-gtab', gTab); if (el.dataset.sholat) gSholat = el.dataset.sholat; go('panduan'); return;
+    }
+    if (el.dataset.gtab) { gTab = el.dataset.gtab; save('ah-gtab', gTab); renderPanduan(); return; }
+    if (el.dataset.sholat) { gSholat = el.dataset.sholat; renderPanduanKeep(); return; }
+    if (el.id === 'hafal-mode') { hafalMode = !hafalMode; revealed = {}; renderPanduanKeep(); return; }
+    if (el.dataset.hafal) { var hk = el.dataset.hafal; setDone(HAFAL_DATE, 'hafal:' + hk, !hafal(hk)); if (hafal(hk)) toast('Alhamdulillah, tercatat sudah hafal'); renderPanduanKeep(); return; }
     if (el.dataset.day) { openDay(el.dataset.day); return; }
     if (el.dataset.week) { weekOffset = Math.min(0, weekOffset + +el.dataset.week); renderRiwayat(); return; }
     if (el.dataset.month) { monthOffset = Math.min(0, monthOffset + +el.dataset.month); renderRiwayat(); return; }
@@ -476,7 +620,7 @@
     var h = (location.hash || '').replace('#', '');
     var g = GROUPS.filter(function (x) { return x.id === h; })[0];
     if (g) { if (!$('sheet').hidden) closeSheet(); go('bacaan', false); var el = $('r-' + g.id); if (el) el.scrollIntoView(); return; }
-    go(['today', 'bacaan', 'riwayat', 'settings'].indexOf(h) >= 0 ? h : view);
+    go(['today', 'bacaan', 'panduan', 'riwayat', 'settings'].indexOf(h) >= 0 ? h : view);
   }
   window.addEventListener('hashchange', route);
   route();
