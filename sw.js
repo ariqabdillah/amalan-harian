@@ -1,5 +1,5 @@
 // Menyimpan aplikasi di HP supaya tetap bisa dibuka tanpa internet
-const CACHE = 'amalan-v5';
+const CACHE = 'amalan-v6';
 const SHELL = ['./', 'index.html', 'css/style.css', 'js/prayer.js', 'js/data.js', 'js/guide.js', 'js/app.js',
   'apps-script.gs', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 

@@ -108,7 +108,7 @@
     if (server) {
       var h = { 'x-pin': pin }; if (body) h['Content-Type'] = 'application/json';
       return fetch('/api/sheets' + (extra || ''), { method: method, headers: h, body: body, cache: 'no-store' }).then(function (r) {
-        if (r.status === 401) { pinOk = false; askPin('PIN tidak cocok. Coba lagi.'); throw new Error('pin'); }
+        if (r.status === 401) { pinOk = false; pin = ''; save('ah-pin', ''); askPin('PIN sudah diganti. Masukkan PIN yang baru.'); throw new Error('pin'); }
         return r.json();
       });
     }
@@ -184,31 +184,59 @@
 
   // ---------- PIN ----------
   var pinOk = true;
+  // Layar kunci PIN (layar penuh, tidak bisa dilewati)
+  var lockBuf = '', lockBusy = false;
   function askPin(msg) {
-    sheetCtx = { type: 'pin' };
-    showSheet('<div class="eyebrow" id="sheet-title">Google Sheets</div><h1 style="font-size:26px;margin:0">Masukkan PIN</h1>' +
-      '<p class="note">' + esc(msg || 'Data di HP ini kosong. Masukkan PIN untuk menyambungkan lagi ke Google Sheets dan memulihkan riwayat Anda.') + '</p>' +
-      '<div class="field"><label for="pin">PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="32"></div>' +
-      '<button class="btn p" id="pin-go">Sambungkan</button><button class="btn s" data-close>Nanti saja</button>');
-    setTimeout(function () { var i = $('pin'); if (i) i.focus(); }, 50);
+    lockBuf = ''; lockBusy = false;
+    var keys = ['1','2','3','4','5','6','7','8','9','','0','del'];
+    $('lock').innerHTML = '<div class="lock-inner">' +
+      '<div class="lock-icon"><img src="icons/icon-192.png" alt=""></div>' +
+      '<div class="eyebrow">Amalan Harian</div><h1>Masukkan PIN</h1>' +
+      '<p class="lock-msg' + (msg ? ' err' : '') + '" id="lock-msg">' + esc(msg || 'Untuk membuka aplikasi dan memulihkan riwayat dari Google Sheets.') + '</p>' +
+      '<div class="dots" id="lock-dots"></div>' +
+      '<div class="keypad">' + keys.map(function (k) {
+        if (!k) return '<span></span>';
+        return '<button class="key' + (k === 'del' ? ' del' : '') + '" data-key="' + k + '" aria-label="' + (k === 'del' ? 'Hapus' : k) + '">' + (k === 'del' ? '⌫' : k) + '</button>';
+      }).join('') + '</div>' +
+      '<button class="btn p" id="pin-go">Masuk</button></div>';
+    $('lock').hidden = false; document.body.classList.add('is-locked');
+    drawDots();
   }
+  function drawDots(state) {
+    var n = Math.max(6, lockBuf.length), h = '';
+    for (var i = 0; i < n; i++) h += '<i class="' + (i < lockBuf.length ? 'on' : '') + '"></i>';
+    var d = $('lock-dots'); d.innerHTML = h; d.className = 'dots' + (state ? ' ' + state : '');
+  }
+  function lockMsg(t, err) { var m = $('lock-msg'); m.textContent = t; m.className = 'lock-msg' + (err ? ' err' : ''); }
+  function lockKey(k) {
+    if (lockBusy) return;
+    if (k === 'del') lockBuf = lockBuf.slice(0, -1);
+    else if (lockBuf.length < 32) lockBuf += k;
+    drawDots();
+  }
+  function unlock() { $('lock').hidden = true; $('lock').innerHTML = ''; document.body.classList.remove('is-locked'); }
   function tryPin() {
-    var v = ($('pin').value || '').trim(); if (!v) return;
-    var btn = $('pin-go'); btn.textContent = 'Memeriksa…'; btn.disabled = true;
+    var v = lockBuf; if (!v || lockBusy) return;
+    lockBusy = true; var btn = $('pin-go'); btn.textContent = 'Memeriksa…'; btn.disabled = true;
     fetch('/api/sheets?check=1', { headers: { 'x-pin': v }, cache: 'no-store' }).then(function (r) {
-      if (r.status === 401) { askPin('PIN tidak cocok. Coba lagi.'); return; }
+      if (r.status === 401) {
+        lockBuf = ''; drawDots('shake'); lockMsg('PIN salah. Coba lagi.', true);
+        lockBusy = false; btn.textContent = 'Masuk'; btn.disabled = false; return;
+      }
       if (!r.ok) throw new Error('x');
       pin = v; save('ah-pin', v); pinOk = true;
-      queueAllLocal(); closeSheet();
-      syncAll(true);
-    }).catch(function () { btn.textContent = 'Sambungkan'; btn.disabled = false; toast('Belum bisa tersambung. Cek sinyal.'); });
+      unlock(); queueAllLocal(); render(); syncAll(true);
+    }).catch(function () {
+      lockBusy = false; btn.textContent = 'Masuk'; btn.disabled = false;
+      lockMsg('Tidak ada sambungan internet. Coba lagi setelah sinyal ada.', true);
+    });
   }
   function checkServer() {
     if (location.protocol !== 'https:' && location.hostname !== '127.0.0.1') return Promise.resolve();
     return fetch('/api/sheets?status=1', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : { configured: false }; })
       .then(function (j) {
         server = !!j.configured; save('ah-server', server);
-        if (server && !pin && $('sheet').hidden) askPin();
+        if (server && !pin) askPin();
       }).catch(function () {});
   }
 
@@ -447,7 +475,7 @@
       html = '<div class="card"><h3>Google Sheets</h3><div class="stack">' +
         '<div class="sync"></div>' +
         '<p class="note">Link Google Sheets tersimpan aman di Vercel. Kalau data Safari dihapus, aplikasi cukup meminta PIN Anda, lalu semua riwayat kembali.</p>' +
-        (pin ? '<button class="btn s" id="sync-now">Sinkronkan sekarang</button><button class="btn s" id="enter-pin">Ganti PIN di HP ini</button>'
+        (pin ? '<button class="btn s" id="sync-now">Sinkronkan sekarang</button><button class="btn s" id="lock-now">Kunci aplikasi sekarang</button>'
              : '<button class="btn p" id="enter-pin">Masukkan PIN</button>') +
         '</div></div>';
     } else {
@@ -619,7 +647,9 @@
       else { syncState = 'off'; renderSettings(); }
       return;
     }
-    if (el.id === 'enter-pin') { askPin('Masukkan PIN yang Anda simpan di Vercel (APP_PIN).'); return; }
+    if (el.id === 'enter-pin') { askPin(); return; }
+    if (el.id === 'lock-now') { pin = ''; save('ah-pin', ''); askPin('Aplikasi terkunci. Masukkan PIN untuk membuka.'); return; }
+    if (el.dataset.key) { lockKey(el.dataset.key); return; }
     if (el.id === 'pin-go') { tryPin(); return; }
     if (el.id === 'sync-now') { syncAll(true); return; }
     if (el.dataset.cfg) { setDone(HAFAL_DATE, 'cfg:' + el.dataset.cfg, true, el.dataset.mode); var y = window.scrollY; renderSettings(); window.scrollTo(0, y); return; }
@@ -637,7 +667,11 @@
   function selectCode() { var r = document.createRange(); r.selectNodeContents($('code-box')); var s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Kode terpilih, ketuk Salin'); }
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && !$('sheet').hidden) closeSheet();
-    if (e.key === 'Enter' && e.target && e.target.id === 'pin') tryPin();
+    if (!$('lock').hidden) {
+      if (e.key === 'Enter') tryPin();
+      else if (e.key === 'Backspace') lockKey('del');
+      else if (/^[0-9]$/.test(e.key)) lockKey(e.key);
+    }
   });
 
   // perbarui status tiap menit & saat aplikasi dibuka lagi
@@ -662,6 +696,7 @@
   }
   window.addEventListener('hashchange', route);
   route();
+  if (server && !pin) askPin();
   checkServer().then(function () { syncAll(false); });
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});

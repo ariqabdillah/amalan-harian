@@ -218,3 +218,25 @@ ul.plain { margin: 0; padding-left: 20px; display: flex; flex-direction: column;
 .mini-seg button.on { background: var(--gold); color: #000; font-weight: 700; }
 .mini-seg button.on.hide { background: var(--line); color: var(--fg); }
 .locked { font-size: 12px; color: var(--gold); border: 1px solid var(--gold); border-radius: 99px; padding: 4px 10px; }
+
+/* layar kunci PIN */
+.lock { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center;
+  padding: calc(var(--safe-top) + 20px) max(24px, env(safe-area-inset-right, 0px)) calc(var(--safe-bottom) + 20px) max(24px, env(safe-area-inset-left, 0px)); overflow-y: auto; }
+body.is-locked #app { visibility: hidden; }
+body.is-locked { overflow: hidden; }
+.lock-inner { width: 100%; max-width: 340px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.lock-icon img { width: 64px; height: 64px; border-radius: 16px; border: 1px solid var(--line); }
+.lock h1 { margin: 0; }
+.lock-msg { color: var(--muted); font-size: 14px; margin: 0; min-height: 42px; }
+.lock-msg.err { color: var(--red); }
+.dots { display: flex; gap: 14px; justify-content: center; margin: 8px 0 14px; flex-wrap: wrap; }
+.dots i { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--gold); transition: background .1s; }
+.dots i.on { background: var(--gold); }
+.dots.shake { animation: shake .35s; }
+@keyframes shake { 20%, 60% { transform: translateX(-10px); } 40%, 80% { transform: translateX(10px); } }
+@media (prefers-reduced-motion: reduce) { .dots.shake { animation: none; } }
+.keypad { display: grid; grid-template-columns: repeat(3, 76px); gap: 14px 22px; justify-content: center; margin-bottom: 14px; }
+.key { width: 76px; height: 76px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line); font-family: var(--display); font-size: 30px; font-weight: 600; color: var(--fg); touch-action: manipulation; }
+.key:active { background: var(--gold); color: #000; }
+.key.del { background: none; border-color: transparent; font-family: var(--body); font-size: 24px; color: var(--muted); }
+.lock .btn { max-width: 300px; }
