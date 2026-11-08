@@ -1,0 +1,11 @@
+function rapikanLog(){const l=LockService.getScriptLock();l.waitLock(20000);try{const s=sh_(),rows=all_(s),m={};rows.forEach(r=>{if(!r[0]||!r[1])return;const k=k_(r[0])+'|'+r[1];if(!m[k]||t_(r[5])>=t_(m[k][5]))m[k]=[k_(r[0]),r[1],r[2],r[3]===true||r[3]==='TRUE',r[4],r[5]];});
+const v=Object.values(m).sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);if(rows.length)s.getRange(2,1,rows.length,6).clearContent();if(v.length)s.getRange(2,1,v.length,6).setValues(v);}finally{l.releaseLock();}}
+function perbaruiRekap(){const ss=SpreadsheetApp.getActive();let r=ss.getSheetByName('Rekap');if(!r)r=ss.insertSheet('Rekap');r.getCharts().forEach(c=>r.removeChart(c));r.clear();r.getRange('A:A').setNumberFormat('@');
+const D=data_(),h=hari_(30),ids=Object.keys(D.nm);
+const daily=[['Tanggal','Sholat wajib (dari 5)','Dzikir pagi (dari 5)','Total amalan selesai']].concat(h.map(d=>{const x=D.by[d]||{};return[d,WAJIB.filter(i=>x[i]).length,PAGI.filter(i=>x[i]).length,Object.keys(x).length];}));
+r.getRange(1,1,daily.length,4).setValues(daily);
+const per=[['Amalan','7 hari terakhir','30 hari terakhir','Konsistensi 30 hari']].concat(ids.map(id=>{let a=0,b=0;h.forEach((d,i)=>{if((D.by[d]||{})[id]){b++;if(i>=23)a++;}});return[D.nm[id],a,b,b/30];}).sort((p,q)=>q[2]-p[2]));
+r.getRange(1,6,per.length,4).setValues(per);r.getRange(2,9,per.length,1).setNumberFormat('0%');r.getRange('A1:I1').setFontWeight('bold');r.setFrozenRows(1);
+r.insertChart(r.newChart().setChartType(Charts.ChartType.LINE).addRange(r.getRange(1,1,daily.length,4)).setPosition(2,11,0,0).setOption('title','Amalan harian 30 hari terakhir').build());
+r.insertChart(r.newChart().setChartType(Charts.ChartType.BAR).addRange(r.getRange(1,6,per.length,1)).addRange(r.getRange(1,8,per.length,1)).setPosition(22,11,0,0).setOption('title','Hari dikerjakan per amalan (30 hari)').setOption('legend',{position:'none'}).build());}
+function pasangOtomatis(){ScriptApp.getProjectTriggers().forEach(t=>ScriptApp.deleteTrigger(t));ScriptApp.newTrigger('kirimLaporan').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(20).create();ScriptApp.newTrigger('perbaruiRekap').timeBased().everyDays(1).atHour(23).create();rapikanLog();perbaruiRekap();kirimLaporan();}

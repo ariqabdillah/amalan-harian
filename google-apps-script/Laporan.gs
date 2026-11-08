@@ -1,0 +1,7 @@
+const WAJIB=['subuh','zuhur','ashar','maghrib','isya'],PAGI=['istighfar','doa_rezeki','seribu_dinar','adrikni','tasbih'];
+function data_(){const m={},nm={};all_(sh_()).forEach(r=>{if(!r[0]||!r[1])return;const d=k_(r[0]),id=String(r[1]);if(d<'2001'||id.indexOf(':')>0)return;nm[id]=String(r[2]||id);const k=d+'|'+id,t=t_(r[5]);if(!m[k]||t>=m[k].t)m[k]={d:d,id:id,ok:r[3]===true||r[3]==='TRUE',t:t};});const by={};Object.values(m).forEach(x=>{if(x.ok)(by[x.d]=by[x.d]||{})[x.id]=1;});return{by:by,nm:nm};}
+function hari_(n){const a=[],tz=SpreadsheetApp.getActive().getSpreadsheetTimeZone();for(let i=n-1;i>=0;i--)a.push(Utilities.formatDate(new Date(Date.now()-i*864e5),tz,'yyyy-MM-dd'));return a;}
+function kirimLaporan(){const D=data_(),h=hari_(7),c={};let w=0,pg=0;h.forEach(d=>{const x=D.by[d]||{};Object.keys(x).forEach(id=>c[id]=(c[id]||0)+1);w+=WAJIB.filter(i=>x[i]).length;if(PAGI.every(i=>x[i]))pg++;});
+const ids=Object.keys(D.nm).sort((a,b)=>(c[b]||0)-(c[a]||0));
+const html='<h2>Laporan Mingguan Amalan Harian</h2><p>'+h[0]+' s/d '+h[6]+'</p><p><b>Sholat wajib:</b> '+w+'/35<br><b>Dzikir pagi lengkap:</b> '+pg+'/7 hari</p><table border="1" cellpadding="6" style="border-collapse:collapse"><tr><th>Amalan</th><th>Hari dikerjakan</th></tr>'+ids.map(i=>'<tr><td>'+D.nm[i]+' ('+i+')</td><td>'+(c[i]||0)+'/7</td></tr>').join('')+'</table><p>Amalan yang tidak ada di tabel belum pernah dicentang.</p>';
+MailApp.sendEmail({to:Session.getActiveUser().getEmail(),subject:'Laporan Mingguan Amalan Harian ('+h[0]+' s/d '+h[6]+')',htmlBody:html});}
