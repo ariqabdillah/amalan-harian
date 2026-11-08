@@ -93,11 +93,11 @@
         note: 'Tidak ada jumlah wajib. Target di sini 11×, boleh terus sampai 100×.' }] },
     { id: 'tasbih', group: 'dzikir', name: 'Tasbih 100×', count: 100, parts: [TASBIH] },
 
-    { id: 'dhuha', group: 'dhuha', name: 'Sholat Dhuha', rakaat: '2–8 rakaat',
+    { id: 'dhuha', bonus: true, group: 'dhuha', name: 'Sholat Dhuha', rakaat: '2–8 rakaat',
       parts: [{ label: 'Niat sholat Dhuha (2 rakaat, boleh sampai 8)', lafaz: "Usholli sunnatadh dhuhaa rok'ataini lillaahi ta'aalaa",
         arti: 'Saya niat sholat sunnah Dhuha dua rakaat karena Allah Ta\'ala.', note: 'Dikerjakan 2 rakaat sekali salam, boleh diulang.' }] },
 
-    { id: 'qobliyah_zuhur', group: 'zuhur', name: 'Qobliyah Zuhur', rakaat: '2 rakaat', notFriday: true,
+    { id: 'qobliyah_zuhur', bonus: true, group: 'zuhur', name: 'Qobliyah Zuhur', rakaat: '2 rakaat', notFriday: true,
       parts: [{ label: 'Niat qobliyah Zuhur (2 rakaat)', lafaz: "Usholli sunnatazh zhuhri rok'ataini qobliyyatan lillaahi ta'aalaa",
         arti: 'Saya niat sholat sunnah sebelum Zuhur dua rakaat karena Allah Ta\'ala.' }] },
     { id: 'zuhur', group: 'zuhur', name: 'Sholat Zuhur', wajib: true, rakaat: '4 rakaat', guide: 'zuhur',
@@ -108,14 +108,14 @@
           arti: 'Saya niat sholat fardhu Jumat dua rakaat menghadap kiblat, tepat waktu, sebagai makmum, karena Allah Ta\'ala.',
           note: 'Datang lebih awal, dengarkan khutbah dengan tenang. Sholat Jumat menggantikan Zuhur.' }] } },
     dzikirSholat('dzikir_zuhur', 'zuhur', 'Zuhur'),
-    { id: 'badiyah_zuhur', group: 'zuhur', name: "Ba'diyah Zuhur", rakaat: '2 rakaat',
+    { id: 'badiyah_zuhur', bonus: true, group: 'zuhur', name: "Ba'diyah Zuhur", rakaat: '2 rakaat',
       parts: [{ label: "Niat ba'diyah Zuhur (2 rakaat)", lafaz: "Usholli sunnatazh zhuhri rok'ataini ba'diyyatan lillaahi ta'aalaa",
         arti: 'Saya niat sholat sunnah sesudah Zuhur dua rakaat karena Allah Ta\'ala.' }],
       friday: { name: "Ba'diyah Jumat", rakaat: '2 rakaat',
         parts: [{ label: "Niat ba'diyah Jumat (2 rakaat)", lafaz: "Usholli sunnatal jumu'ati rok'ataini ba'diyyatan lillaahi ta'aalaa",
           arti: 'Saya niat sholat sunnah sesudah Jumat dua rakaat karena Allah Ta\'ala.' }] } },
 
-    { id: 'qobliyah_ashar', group: 'ashar', name: 'Qobliyah Ashar', rakaat: '2 rakaat',
+    { id: 'qobliyah_ashar', bonus: true, group: 'ashar', name: 'Qobliyah Ashar', rakaat: '2 rakaat',
       parts: [{ label: 'Niat qobliyah Ashar (2 rakaat)', lafaz: "Usholli sunnatal 'ashri rok'ataini qobliyyatan lillaahi ta'aalaa",
         arti: 'Saya niat sholat sunnah sebelum Ashar dua rakaat karena Allah Ta\'ala.' }] },
     { id: 'ashar', group: 'ashar', name: 'Sholat Ashar', wajib: true, rakaat: '4 rakaat', guide: 'ashar',
@@ -123,18 +123,18 @@
         arti: 'Saya niat sholat fardhu Ashar empat rakaat menghadap kiblat, tepat waktu, karena Allah Ta\'ala.' }] },
     dzikirSholat('dzikir_ashar', 'ashar', 'Ashar'),
 
-    { id: 'istighfar_petang', group: 'petang', name: 'Sayyidul Istighfar', parts: [SAYYIDUL] },
-    { id: 'bismillah_petang', group: 'petang', name: 'Doa Perlindungan 3×', count: 3,
+    { id: 'istighfar_petang', bonus: true, group: 'petang', name: 'Sayyidul Istighfar', parts: [SAYYIDUL] },
+    { id: 'bismillah_petang', bonus: true, group: 'petang', name: 'Doa Perlindungan 3×', count: 3,
       parts: [{ label: 'Doa perlindungan (3×)', lafaz: "Bismillaahil ladzii laa yadhurru ma'asmihii syai-un fil ardhi wa laa fis samaa-i wa huwas samii'ul 'aliim",
         arti: 'Dengan nama Allah, yang bersama nama-Nya tidak ada sesuatu pun di bumi maupun di langit yang dapat membahayakan. Dialah Yang Maha Mendengar lagi Maha Mengetahui.',
         note: 'Dibaca 3× pagi dan petang (HR. Abu Dawud dan Tirmidzi).' }] },
-    { id: 'tasbih_petang', group: 'petang', name: 'Tasbih 100×', count: 100, parts: [TASBIH] },
+    { id: 'tasbih_petang', bonus: true, group: 'petang', name: 'Tasbih 100×', count: 100, parts: [TASBIH] },
 
     { id: 'maghrib', group: 'maghrib', name: 'Sholat Maghrib', wajib: true, rakaat: '3 rakaat', guide: 'maghrib',
       parts: [{ label: 'Niat sholat Maghrib (3 rakaat)', lafaz: "Usholli fardhol maghribi tsalaatsa roka'aatin mustaqbilal qiblati adaa'an lillaahi ta'aalaa",
         arti: 'Saya niat sholat fardhu Maghrib tiga rakaat menghadap kiblat, tepat waktu, karena Allah Ta\'ala.' }] },
     dzikirSholat('dzikir_maghrib', 'maghrib', 'Maghrib'),
-    { id: 'badiyah_maghrib', group: 'maghrib', name: "Ba'diyah Maghrib", rakaat: '2 rakaat',
+    { id: 'badiyah_maghrib', bonus: true, group: 'maghrib', name: "Ba'diyah Maghrib", rakaat: '2 rakaat',
       parts: [{ label: "Niat ba'diyah Maghrib (2 rakaat)", lafaz: "Usholli sunnatal maghribi rok'ataini ba'diyyatan lillaahi ta'aalaa",
         arti: 'Saya niat sholat sunnah sesudah Maghrib dua rakaat karena Allah Ta\'ala.' }] },
 
@@ -142,12 +142,12 @@
       parts: [{ label: 'Niat sholat Isya (4 rakaat)', lafaz: "Usholli fardhol 'isyaa-i arba'a roka'aatin mustaqbilal qiblati adaa'an lillaahi ta'aalaa",
         arti: 'Saya niat sholat fardhu Isya empat rakaat menghadap kiblat, tepat waktu, karena Allah Ta\'ala.' }] },
     dzikirSholat('dzikir_isya', 'isya', 'Isya'),
-    { id: 'badiyah_isya', group: 'isya', name: "Ba'diyah Isya", rakaat: '2 rakaat',
+    { id: 'badiyah_isya', bonus: true, group: 'isya', name: "Ba'diyah Isya", rakaat: '2 rakaat',
       parts: [{ label: "Niat ba'diyah Isya (2 rakaat)", lafaz: "Usholli sunnatal 'isyaa-i rok'ataini ba'diyyatan lillaahi ta'aalaa",
         arti: 'Saya niat sholat sunnah sesudah Isya dua rakaat karena Allah Ta\'ala.',
         note: 'Sebelum tidur, pasang niat bangun untuk tahajud.' }] },
 
-    { id: 'puasa_senin', group: 'puasa', name: 'Puasa Senin', days: [1],
+    { id: 'puasa_senin', bonus: true, group: 'puasa', name: 'Puasa Senin', days: [1],
       parts: [
         { label: 'Niat puasa Senin', lafaz: "Nawaitu shouma yaumil itsnaini sunnatan lillaahi ta'aalaa",
           arti: 'Saya niat puasa sunnah hari Senin karena Allah Ta\'ala.',
@@ -155,7 +155,7 @@
         { label: 'Doa berbuka', lafaz: "Dzahabazh zhoma-u wabtallatil 'uruuqu wa tsabatal ajru in syaa-alloh",
           arti: 'Telah hilang rasa haus, urat-urat telah basah, dan pahala telah tetap, insya Allah.', note: 'HR. Abu Dawud.' }
       ] },
-    { id: 'puasa_kamis', group: 'puasa', name: 'Puasa Kamis', days: [4],
+    { id: 'puasa_kamis', bonus: true, group: 'puasa', name: 'Puasa Kamis', days: [4],
       parts: [
         { label: 'Niat puasa Kamis', lafaz: "Nawaitu shouma yaumil khomiisi sunnatan lillaahi ta'aalaa",
           arti: 'Saya niat puasa sunnah hari Kamis karena Allah Ta\'ala.',
@@ -164,7 +164,7 @@
           arti: 'Telah hilang rasa haus, urat-urat telah basah, dan pahala telah tetap, insya Allah.', note: 'HR. Abu Dawud.' }
       ] },
 
-    { id: 'kahfi', group: 'harian', name: 'Membaca Al-Kahfi', days: [5], end: function (t) { return t.maghrib; },
+    { id: 'kahfi', bonus: true, group: 'harian', name: 'Membaca Al-Kahfi', days: [5], end: function (t) { return t.maghrib; },
       link: 'https://quran.com/id/al-kahf',
       parts: [{ label: 'Surat Al-Kahfi (110 ayat)', lafaz: 'Surat Al-Kahfi',
         arti: 'Disunnahkan dibaca pada hari Jumat, sejak Kamis malam sampai sebelum Maghrib hari Jumat. Boleh dicicil sepanjang hari.',

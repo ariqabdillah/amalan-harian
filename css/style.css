@@ -68,6 +68,8 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 32px; line-height
 .tag.w { border-color: var(--gold); color: var(--gold); }
 .tag.l { border-color: var(--red); color: var(--red); }
 .tag.c { border-color: var(--gold-soft); color: var(--gold); }
+.tag.b { border-style: dashed; color: var(--muted); }
+.row.lewat .name { color: var(--muted); }
 .tags { display: flex; gap: 6px; margin-left: auto; }
 .sub-note { display: block; font-size: 12px; color: var(--muted); }
 
@@ -205,3 +207,14 @@ details[open] summary { margin-bottom: 8px; }
 a.open-btn { text-decoration: none; }
 a.btn { display: block; text-decoration: none; }
 ul.plain { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; }
+
+/* atur checklist */
+.cfg-group { margin-top: 14px; }
+.cfg-group h4 { margin: 0 0 4px; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.cfg-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid #16130f; }
+.cfg-row span { font-size: 14.5px; min-width: 0; }
+.mini-seg { display: flex; border: 1px solid var(--line); border-radius: 99px; padding: 2px; flex: none; }
+.mini-seg button { font-size: 12px; padding: 5px 10px; border-radius: 99px; color: var(--muted); }
+.mini-seg button.on { background: var(--gold); color: #000; font-weight: 700; }
+.mini-seg button.on.hide { background: var(--line); color: var(--fg); }
+.locked { font-size: 12px; color: var(--gold); border: 1px solid var(--gold); border-radius: 99px; padding: 4px 10px; }

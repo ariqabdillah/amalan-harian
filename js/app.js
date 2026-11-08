@@ -20,10 +20,17 @@
     return ITEMS.filter(function (it) {
       if (it.days && it.days.indexOf(dow) < 0) return false;
       if (it.notFriday && dow === 5) return false;
-      return true;
+      return modeOf(it.id) !== 'hide';
     }).map(function (it) { return itemDef(k, it.id); });
   }
-  function knownId(id) { return !!ITEM[id] || id.indexOf('hafal:') === 0; }
+  function knownId(id) { return !!ITEM[id] || id.indexOf('hafal:') === 0 || (id.indexOf('cfg:') === 0 && !!ITEM[id.slice(4)]); }
+  // Target / Bonus / Sembunyikan per amalan (disimpan juga di Google Sheets)
+  function defaultMode(id) { return ITEM[id].bonus ? 'bonus' : 'target'; }
+  function modeOf(id) {
+    if (ITEM[id].wajib) return 'target';
+    var r = data[HAFAL_DATE] && data[HAFAL_DATE]['cfg:' + id];
+    return (r && r.d && /^(target|bonus|hide)$/.test(r.n)) ? r.n : defaultMode(id);
+  }
   var HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   var HARI3 = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
   var BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -58,23 +65,24 @@
   function groupOf(id) { for (var i = 0; i < GROUPS.length; i++) if (GROUPS[i].id === ITEM[id].group) return GROUPS[i]; }
   function status(k, id) {
     if (isDone(k, id)) return 'done';
-    var t = todayKey();
-    if (k < t) return 'late';
+    var t = todayKey(), late = modeOf(id) === 'bonus' ? 'lewat' : 'late';
+    if (k < t) return late;
     if (k > t) return 'belum';
     var g = groupOf(id), pt = Prayer.times(parse(k)), m = nowMin();
     var end = ITEM[id].end ? ITEM[id].end(pt) : g.end(pt);
     if (m < g.start(pt)) return 'belum';
-    if (m >= end) return 'late';
+    if (m >= end) return late;
     return 'now';
   }
   function dayStats(k) {
-    var done = 0, wajib = 0, missed = [], list = itemsFor(k);
+    var done = 0, wajib = 0, bonus = 0, missed = [], list = itemsFor(k), total = 0;
     list.forEach(function (it) {
-      var s = status(k, it.id);
-      if (s === 'done') { done++; if (it.wajib) wajib++; }
+      var s = status(k, it.id), isBonus = modeOf(it.id) === 'bonus';
+      if (!isBonus) total++;
+      if (s === 'done') { if (isBonus) bonus++; else done++; if (it.wajib) wajib++; }
       if (s === 'late') missed.push(it.id);
     });
-    return { done: done, total: list.length, wajib: wajib, missed: missed, pct: list.length ? done / list.length : 0 };
+    return { done: done, total: total, bonus: bonus, wajib: wajib, missed: missed, pct: total ? done / total : 0 };
   }
 
   function setDone(k, id, val, note) {
@@ -89,6 +97,7 @@
 
   function opName(k, id) {
     if (id.indexOf('hafal:') === 0) { var r = G.READ[id.slice(6)]; return 'Hafalan: ' + (r ? r.label : id.slice(6)); }
+    if (id.indexOf('cfg:') === 0) return 'Pengaturan: ' + ITEM[id.slice(4)].name;
     return itemDef(k, id).name;
   }
 
@@ -209,7 +218,9 @@
     var s = status(k, it.id);
     var tags = '';
     if (it.wajib) tags += '<span class="tag w">Wajib</span>';
+    if (modeOf(it.id) === 'bonus') tags += '<span class="tag b">Bonus</span>';
     if (s === 'late') tags += '<span class="tag l">Terlewat</span>';
+    if (s === 'lewat') tags += '<span class="tag">lewat waktu</span>';
     if (s === 'now') tags += '<span class="tag c">Waktunya</span>';
     var note = data[k] && data[k][it.id] && data[k][it.id].n;
     return '<div class="row ' + s + '">' +
@@ -252,7 +263,7 @@
     var wajibDue = WAJIB.filter(function (id) { return status(k, id) !== 'belum'; }).length;
     var tj = streak(tahajudDone);
     $('view-today').innerHTML =
-      '<div class="hero"><div class="ring" style="--p:' + Math.round(st.pct * 100) + '"><div><span><b>' + st.done + '/' + st.total + '</b><small>selesai</small></span></div></div>' +
+      '<div class="hero"><div class="ring" style="--p:' + Math.round(st.pct * 100) + '"><div><span><b>' + st.done + '/' + st.total + '</b><small>' + (st.bonus ? '+' + st.bonus + ' bonus' : 'target') + '</small></span></div></div>' +
       '<div class="chips"><div>🕌 Sholat wajib <b>' + st.wajib + '/' + (wajibDue || 5) + '</b> ' + (wajibDue < 5 ? 'sejauh ini' : 'hari ini') + '</div>' +
       '<div>🔥 Tahajud <b>' + tj + ' hari</b> berturut-turut</div>' +
       (st.missed.length ? '<div class="miss">● ' + st.missed.length + ' amalan terlewat hari ini</div>' : '<div>✨ Belum ada yang terlewat</div>') +
@@ -437,6 +448,17 @@
         (sheetUrl ? '<button class="btn s" id="sync-now">Sinkronkan sekarang</button>' : '') +
         '</div></div>';
     }
+    html += '<div class="card" id="cfg"><h3>Atur Checklist</h3><p class="note"><b style="color:var(--gold)">Target</b> dihitung di progres dan ditandai Terlewat kalau tidak dikerjakan. <b style="color:var(--gold)">Bonus</b> tidak mengurangi progres. <b style="color:var(--gold)">Sembunyikan</b> tidak ditampilkan.</p>' +
+      GROUPS.map(function (g) {
+        var its = ITEMS.filter(function (i) { return i.group === g.id; });
+        return '<div class="cfg-group"><h4>' + esc(g.title) + '</h4>' + its.map(function (it) {
+          var m = modeOf(it.id), nm = it.name + (it.days && it.name.indexOf(HARI[it.days[0]]) < 0 ? ' (' + it.days.map(function (d) { return HARI[d]; }).join(', ') + ')' : '');
+          return '<div class="cfg-row"><span>' + esc(nm) + '</span>' + (it.wajib ? '<span class="locked">Wajib</span>' :
+            '<div class="mini-seg">' + [['target', 'Target'], ['bonus', 'Bonus'], ['hide', 'Sembunyi']].map(function (o) {
+              return '<button class="' + (m === o[0] ? 'on' : '') + (o[0] === 'hide' ? ' hide' : '') + '" data-cfg="' + it.id + '" data-mode="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div>') + '</div>';
+        }).join('') + '</div>';
+      }).join('') +
+      '<button class="btn s" id="cfg-reset" style="margin-top:14px">Kembalikan ke pengaturan awal</button></div>';
     html += '<div class="card"><h3>Cara membuat Google Sheet</h3><ol class="steps">' +
       '<li>Buka <b>sheets.new</b> di Safari untuk membuat Google Sheet baru, beri nama <b>Amalan Harian</b>.</li>' +
       '<li>Di Safari, ketuk <b>aA</b> → <b>Minta Situs Web Desktop</b>.</li>' +
@@ -589,6 +611,11 @@
     if (el.id === 'enter-pin') { askPin('Masukkan PIN yang Anda simpan di Vercel (APP_PIN).'); return; }
     if (el.id === 'pin-go') { tryPin(); return; }
     if (el.id === 'sync-now') { syncAll(true); return; }
+    if (el.dataset.cfg) { setDone(HAFAL_DATE, 'cfg:' + el.dataset.cfg, true, el.dataset.mode); var y = window.scrollY; renderSettings(); window.scrollTo(0, y); return; }
+    if (el.id === 'cfg-reset') {
+      ITEMS.forEach(function (it) { if (!it.wajib && modeOf(it.id) !== defaultMode(it.id)) setDone(HAFAL_DATE, 'cfg:' + it.id, true, defaultMode(it.id)); });
+      toast('Pengaturan checklist dikembalikan'); var y2 = window.scrollY; renderSettings(); window.scrollTo(0, y2); return;
+    }
     if (el.id === 'copy-code') {
       var txt = scriptCode;
       if (navigator.clipboard && txt) navigator.clipboard.writeText(txt).then(function () { toast('Kode tersalin'); }, selectCode);
