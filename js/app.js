@@ -14,7 +14,9 @@
   var data = load('ah-data', {});      // { 'YYYY-MM-DD': { itemId: { d:1|0, n:'catatan', ts } } }
   var queue = load('ah-queue', []);    // perubahan yang belum terkirim ke Google Sheets
   var counts = load('ah-count', {});   // { 'YYYY-MM-DD': { itemId: n } }
-  var sheetUrl = load('ah-url', '');
+  var sheetUrl = load('ah-url', '');   // cara lama: link Apps Script ditempel manual
+  var pin = load('ah-pin', '');        // cara baru: link disimpan di Vercel, HP cukup ingat PIN
+  var server = load('ah-server', false); // true kalau Vercel sudah diisi SHEET_URL + APP_PIN
   var firstDay = load('ah-first', null);
 
   // ---------- tanggal ----------
@@ -65,15 +67,33 @@
   }
 
   // ---------- sinkron Google Sheets ----------
-  var syncState = sheetUrl ? 'wait' : 'off', syncing = false;
+  var syncState = 'wait', syncing = false;
+  function connected() { return server ? !!pin : !!sheetUrl; }
+  function api(method, body, extra) {
+    if (server) {
+      var h = { 'x-pin': pin }; if (body) h['Content-Type'] = 'application/json';
+      return fetch('/api/sheets' + (extra || ''), { method: method, headers: h, body: body, cache: 'no-store' }).then(function (r) {
+        if (r.status === 401) { pinOk = false; askPin('PIN tidak cocok. Coba lagi.'); throw new Error('pin'); }
+        return r.json();
+      });
+    }
+    if (method === 'POST') return fetch(sheetUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: body }).then(function (r) { return r.json(); });
+    return fetch(sheetUrl + (sheetUrl.indexOf('?') < 0 ? '?' : '&') + 't=' + Date.now()).then(function (r) { return r.json(); });
+  }
+  function queueAllLocal() {
+    Object.keys(data).forEach(function (d) { Object.keys(data[d]).forEach(function (id) {
+      if (!ITEM[id]) return; var r = data[d][id];
+      if (!queue.some(function (o) { return o.date === d && o.id === id; })) queue.push({ date: d, id: id, name: ITEM[id].name, done: r.d, note: r.n || '', ts: r.ts || Date.now() });
+    }); });
+    save('ah-queue', queue);
+  }
   function flush() {
-    if (!sheetUrl) { syncState = 'off'; renderSync(); return Promise.resolve(); }
+    if (!connected()) { syncState = 'off'; renderSync(); return Promise.resolve(); }
     if (!queue.length) { syncState = 'ok'; renderSync(); return Promise.resolve(); }
     if (syncing) return Promise.resolve();
     syncing = true; syncState = 'wait'; renderSync();
     var batch = queue.slice();
-    return fetch(sheetUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ops: batch }) })
-      .then(function (r) { return r.json(); })
+    return api('POST', JSON.stringify({ ops: batch }))
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || 'gagal');
         queue = queue.filter(function (o) { return !batch.some(function (b) { return b.date === o.date && b.id === o.id && b.ts === o.ts; }); });
@@ -83,9 +103,8 @@
       .then(function () { syncing = false; renderSync(); });
   }
   function pull() {
-    if (!sheetUrl) return Promise.resolve(false);
-    return fetch(sheetUrl + (sheetUrl.indexOf('?') < 0 ? '?' : '&') + 't=' + Date.now())
-      .then(function (r) { return r.json(); })
+    if (!connected()) return Promise.resolve(false);
+    return api('GET')
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || 'gagal');
         var changed = false;
@@ -103,7 +122,7 @@
   }
   function syncAll(showToast) {
     return flush().then(pull).then(function (changed) {
-      if (sheetUrl && !queue.length) syncState = 'ok';
+      if (connected() && !queue.length) syncState = 'ok';
       renderSync(); if (changed) render();
       if (showToast) toast('Tersinkron dengan Google Sheets');
     }).catch(function () { syncState = 'wait'; renderSync(); if (showToast) toast('Belum bisa tersambung. Cek sinyal atau link.'); });
@@ -112,9 +131,39 @@
     var el = document.querySelector('#view-' + view + ' .sync'); if (!el) return;
     var txt = syncState === 'ok' ? 'Tersimpan di Google Sheets'
       : syncState === 'wait' ? (queue.length ? queue.length + ' perubahan menunggu dikirim' : 'Menyambungkan…')
-      : 'Belum tersambung ke Google Sheets';
+      : (server ? 'Masukkan PIN untuk menyambungkan' : 'Belum tersambung ke Google Sheets');
     el.className = 'sync ' + syncState;
-    el.innerHTML = '<i></i><span>' + txt + '</span>' + (syncState === 'off' ? ' <button data-go="settings">Sambungkan</button>' : '');
+    el.innerHTML = '<i></i><span>' + txt + '</span>' + (syncState === 'off' ? (server ? ' <button id="enter-pin">Masukkan PIN</button>' : ' <button data-go="settings">Sambungkan</button>') : '');
+  }
+
+  // ---------- PIN ----------
+  var pinOk = true;
+  function askPin(msg) {
+    sheetCtx = { type: 'pin' };
+    showSheet('<div class="eyebrow" id="sheet-title">Google Sheets</div><h1 style="font-size:26px;margin:0">Masukkan PIN</h1>' +
+      '<p class="note">' + esc(msg || 'Data di HP ini kosong. Masukkan PIN untuk menyambungkan lagi ke Google Sheets dan memulihkan riwayat Anda.') + '</p>' +
+      '<div class="field"><label for="pin">PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="32"></div>' +
+      '<button class="btn p" id="pin-go">Sambungkan</button><button class="btn s" data-close>Nanti saja</button>');
+    setTimeout(function () { var i = $('pin'); if (i) i.focus(); }, 50);
+  }
+  function tryPin() {
+    var v = ($('pin').value || '').trim(); if (!v) return;
+    var btn = $('pin-go'); btn.textContent = 'Memeriksa…'; btn.disabled = true;
+    fetch('/api/sheets?check=1', { headers: { 'x-pin': v }, cache: 'no-store' }).then(function (r) {
+      if (r.status === 401) { askPin('PIN tidak cocok. Coba lagi.'); return; }
+      if (!r.ok) throw new Error('x');
+      pin = v; save('ah-pin', v); pinOk = true;
+      queueAllLocal(); closeSheet();
+      syncAll(true);
+    }).catch(function () { btn.textContent = 'Sambungkan'; btn.disabled = false; toast('Belum bisa tersambung. Cek sinyal.'); });
+  }
+  function checkServer() {
+    if (location.protocol !== 'https:' && location.hostname !== '127.0.0.1') return Promise.resolve();
+    return fetch('/api/sheets?status=1', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : { configured: false }; })
+      .then(function (j) {
+        server = !!j.configured; save('ah-server', server);
+        if (server && !pin && $('sheet').hidden) askPin();
+      }).catch(function () {});
   }
 
   // ---------- tampilan ----------
@@ -255,20 +304,31 @@
   var scriptCode = '';
   function renderSettings() {
     var pt = Prayer.times(new Date());
-    var html = '<div class="card"><h3>Google Sheets</h3><div class="stack">' +
-      '<div class="sync"></div>' +
-      '<div class="field"><label for="url">Link Web App Apps Script</label><input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(sheetUrl) + '"></div>' +
-      '<button class="btn p" id="save-url">Simpan &amp; sambungkan</button>' +
-      (sheetUrl ? '<button class="btn s" id="sync-now">Sinkronkan sekarang</button>' : '') +
-      '<p class="note">Simpan link ini juga di Catatan HP Anda. Kalau aplikasi terhapus, tempel lagi link yang sama dan semua riwayat kembali. Jangan bagikan link ini ke orang lain.</p></div></div>';
-    html += '<div class="card"><h3>Cara menyambungkan</h3><ol class="steps">' +
+    var html;
+    if (server) {
+      html = '<div class="card"><h3>Google Sheets</h3><div class="stack">' +
+        '<div class="sync"></div>' +
+        '<p class="note">Link Google Sheets tersimpan aman di Vercel. Kalau data Safari dihapus, aplikasi cukup meminta PIN Anda, lalu semua riwayat kembali.</p>' +
+        (pin ? '<button class="btn s" id="sync-now">Sinkronkan sekarang</button><button class="btn s" id="enter-pin">Ganti PIN di HP ini</button>'
+             : '<button class="btn p" id="enter-pin">Masukkan PIN</button>') +
+        '</div></div>';
+    } else {
+      html = '<div class="card"><h3>Google Sheets</h3><div class="stack">' +
+        '<div class="sync"></div>' +
+        '<p class="note"><b style="color:var(--gold)">Supaya tidak perlu menempel link lagi setelah data Safari dihapus:</b> di Vercel buka proyek <b>amalan-harian</b> → <b>Settings → Environment Variables</b>. Tambahkan <b>SHEET_URL</b> berisi link Apps Script (berakhiran /exec) dan <b>APP_PIN</b> berisi PIN pilihan Anda. Lalu buka <b>Deployments</b> → titik tiga di deployment teratas → <b>Redeploy</b>.</p>' +
+        '<div class="field"><label for="url">Atau tempel link Apps Script di sini (cara lama)</label><input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(sheetUrl) + '"></div>' +
+        '<button class="btn p" id="save-url">Simpan &amp; sambungkan</button>' +
+        (sheetUrl ? '<button class="btn s" id="sync-now">Sinkronkan sekarang</button>' : '') +
+        '</div></div>';
+    }
+    html += '<div class="card"><h3>Cara membuat Google Sheet</h3><ol class="steps">' +
       '<li>Buka <b>sheets.new</b> di Safari untuk membuat Google Sheet baru, beri nama <b>Amalan Harian</b>.</li>' +
       '<li>Di Safari, ketuk <b>aA</b> → <b>Minta Situs Web Desktop</b>.</li>' +
       '<li>Buka menu <b>Ekstensi → Apps Script</b>.</li>' +
       '<li>Hapus isi yang ada, lalu tempel kode di bawah (tombol <b>Salin kode</b>). Simpan.</li>' +
       '<li>Klik <b>Terapkan → Deployment baru</b>. Pilih jenis <b>Aplikasi web</b>. Jalankan sebagai: <b>Saya</b>. Yang memiliki akses: <b>Siapa saja</b>. Klik <b>Terapkan</b>.</li>' +
       '<li>Izinkan akses: pilih akun Anda → <b>Lanjutan</b> → <b>Buka Amalan Harian (tidak aman)</b> → <b>Izinkan</b>. Ini aman karena kodenya milik Anda sendiri.</li>' +
-      '<li>Salin <b>URL aplikasi web</b> (berakhiran /exec), tempel di kolom atas, lalu ketuk <b>Simpan &amp; sambungkan</b>.</li></ol>' +
+      '<li>Salin <b>URL aplikasi web</b> (berakhiran /exec), lalu simpan di Vercel sebagai <b>SHEET_URL</b>.</li></ol>' +
       '<div class="stack" style="margin-top:12px"><button class="btn s" id="copy-code">Salin kode</button><div class="code-box" id="code-box">Memuat kode…</div></div></div>';
     html += '<div class="card"><h3>Jadwal sholat hari ini</h3><div class="times">' +
       [['Subuh', pt.subuh], ['Terbit', pt.terbit], ['Zuhur', pt.zuhur], ['Ashar', pt.ashar], ['Maghrib', pt.maghrib], ['Isya', pt.isya]].map(function (x) { return '<div><b>' + Prayer.hhmm(x[1]) + '</b>' + x[0] + '</div>'; }).join('') +
@@ -378,16 +438,12 @@
       var v = $('url').value.trim();
       if (v && !/^https:\/\/script\.google(usercontent)?\.com\//.test(v)) { toast('Link harus diawali https://script.google.com/'); return; }
       sheetUrl = v; save('ah-url', v);
-      if (v) {
-        // kirim semua data lokal supaya Google Sheets punya salinan lengkap
-        Object.keys(data).forEach(function (d) { Object.keys(data[d]).forEach(function (id) {
-          if (!ITEM[id]) return; var r = data[d][id];
-          if (!queue.some(function (o) { return o.date === d && o.id === id; })) queue.push({ date: d, id: id, name: ITEM[id].name, done: r.d, note: r.n || '', ts: r.ts || Date.now() });
-        }); });
-        save('ah-queue', queue); syncAll(true).then(renderSettings);
-      } else { syncState = 'off'; renderSettings(); }
+      if (v) { queueAllLocal(); syncAll(true).then(renderSettings); }
+      else { syncState = 'off'; renderSettings(); }
       return;
     }
+    if (el.id === 'enter-pin') { askPin('Masukkan PIN yang Anda simpan di Vercel (APP_PIN).'); return; }
+    if (el.id === 'pin-go') { tryPin(); return; }
     if (el.id === 'sync-now') { syncAll(true); return; }
     if (el.id === 'copy-code') {
       var txt = scriptCode;
@@ -397,7 +453,10 @@
     }
   });
   function selectCode() { var r = document.createRange(); r.selectNodeContents($('code-box')); var s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Kode terpilih, ketuk Salin'); }
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !$('sheet').hidden) closeSheet();
+    if (e.key === 'Enter' && e.target && e.target.id === 'pin') tryPin();
+  });
 
   // perbarui status tiap menit & saat aplikasi dibuka lagi
   var lastDay = todayKey();
@@ -421,7 +480,7 @@
   }
   window.addEventListener('hashchange', route);
   route();
-  syncAll(false);
+  checkServer().then(function () { syncAll(false); });
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
 })();

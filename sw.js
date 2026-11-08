@@ -1,5 +1,5 @@
 // Menyimpan aplikasi di HP supaya tetap bisa dibuka tanpa internet
-const CACHE = 'amalan-v1';
+const CACHE = 'amalan-v2';
 const SHELL = ['./', 'index.html', 'css/style.css', 'js/prayer.js', 'js/data.js', 'js/app.js',
   'apps-script.gs', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
@@ -13,6 +13,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
+  if (url.pathname.startsWith('/api/')) return; // data pribadi, jangan disimpan
   if (url.hostname.endsWith('google.com') || url.hostname.endsWith('googleusercontent.com')) return; // data sinkron, jangan disimpan
   const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
   if (url.origin !== location.origin && !isFont) return;
