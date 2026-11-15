@@ -310,33 +310,51 @@
     renderSync();
   }
 
+  // kategori di tab Bacaan
+  var BCATS = [['semua', 'Semua'], ['doa', 'Doa'], ['dzikir', 'Dzikir'], ['sholat', 'Niat Sholat'], ['puasa', 'Puasa'], ['lainnya', 'Lainnya']];
+  var bCat = load('ah-bcat', 'semua');
+  function catOf(it) {
+    if (it.group === 'doa') return 'doa';
+    if (it.group === 'dzikir' || it.group === 'petang' || it.phases) return 'dzikir';
+    if (it.group === 'puasa') return 'puasa';
+    if (it.group === 'harian') return 'lainnya';
+    return 'sholat';
+  }
+  function partHtml(it, p, idx, last, tk, today) {
+    return '<div class="part"><span class="label">' + esc(p.label) + (it.rakaat && idx === 0 ? ' · ' + esc(it.rakaat) : '') + '</span>' +
+      (it.id === 'sedekah' || it.id === 'kahfi' ? '' : '<p class="lafaz">' + esc(p.lafaz) + '</p>') +
+      '<p class="arti">' + esc(p.arti) + '</p>' + (p.note ? '<p class="note">' + esc(p.note) + '</p>' : '') +
+      (last ? '<div class="btn-row">' +
+        (today ? '<button class="open-btn" data-open="' + it.id + '" data-date="' + tk + '">' + (it.count ? 'Buka penghitung' : 'Buka') + '</button>' : '') +
+        (it.link ? '<a class="open-btn" href="' + it.link + '" target="_blank" rel="noopener">Buka surat (latin + arti)</a>' : '') +
+        (it.guide ? '<button class="open-btn" data-guide="sholat" data-sholat="' + it.guide + '">Panduan sholat</button>' : '') + '</div>' : '') + '</div>';
+  }
   function renderBacaan() {
-    var pt = Prayer.times(new Date());
-    var html = '<p class="note">Ketuk "Buka" untuk menandai selesai atau memakai penghitung dzikir. Kalau berjamaah sebagai makmum, tambahkan <i>ma\'muuman</i> sebelum <i>lillaahi ta\'aalaa</i>.</p>';
-    var tk = todayKey(), dow = new Date().getDay();
+    var pt = Prayer.times(new Date()), tk = todayKey(), dow = new Date().getDay();
+    var html = '<div class="cat-bar">' + BCATS.map(function (c) {
+      return '<button class="chip' + (c[0] === bCat ? ' on' : '') + '" data-bcat="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>';
+    if (bCat === 'semua' || bCat === 'sholat') html += '<p class="note">Kalau berjamaah sebagai makmum, tambahkan <i>ma\'muuman</i> sebelum <i>lillaahi ta\'aalaa</i>.</p>';
+    var show = function (it) { return bCat === 'semua' || catOf(it) === bCat; };
     GROUPS.forEach(function (g) {
+      var its = ITEMS.filter(function (i) { return i.group === g.id && !i.phases && show(i); });
+      if (!its.length) return;
       html += '<div class="read-group" id="r-' + g.id + '"><h2>' + esc(g.title) + '<small>' + esc(g.when(pt)) + '</small></h2>';
-      ITEMS.filter(function (i) { return i.group === g.id; }).forEach(function (it) {
-        if (it.phases) {
-          html += '<div class="part"><span class="label">' + esc(it.name) + '</span><p class="arti">Istighfar, doa keselamatan, Ayat Kursi, tasbih-tahmid-takbir 33×, dan penutup.</p>' +
-            '<div class="btn-row"><button class="open-btn" data-open="' + it.id + '" data-date="' + tk + '">Buka penghitung</button><button class="open-btn" data-guide="dzikir">Lihat bacaan lengkap</button></div></div>';
-          return;
-        }
+      its.forEach(function (it) {
         var parts = it.parts.slice();
         if (it.friday) parts = parts.concat(it.friday.parts.map(function (p) { return { label: 'Hari Jumat · ' + p.label, lafaz: p.lafaz, arti: p.arti, note: p.note }; }));
         var today = !it.days || it.days.indexOf(dow) >= 0;
-        parts.forEach(function (p, idx) {
-          html += '<div class="part"><span class="label">' + esc(p.label) + (it.rakaat && idx === 0 ? ' · ' + esc(it.rakaat) : '') + '</span>' +
-            (it.id === 'sedekah' || it.id === 'kahfi' ? '' : '<p class="lafaz">' + esc(p.lafaz) + '</p>') +
-            '<p class="arti">' + esc(p.arti) + '</p>' + (p.note ? '<p class="note">' + esc(p.note) + '</p>' : '') +
-            (idx === parts.length - 1 ? '<div class="btn-row">' +
-              (today ? '<button class="open-btn" data-open="' + it.id + '" data-date="' + tk + '">' + (it.count ? 'Buka penghitung' : 'Buka') + '</button>' : '') +
-              (it.link ? '<a class="open-btn" href="' + it.link + '" target="_blank" rel="noopener">Buka surat (latin + arti)</a>' : '') +
-              (it.guide ? '<button class="open-btn" data-guide="sholat" data-sholat="' + it.guide + '">Panduan sholat</button>' : '') + '</div>' : '') + '</div>';
-        });
+        parts.forEach(function (p, idx) { html += partHtml(it, p, idx, idx === parts.length - 1, tk, today); });
       });
       html += '</div>';
     });
+    // dzikir setelah sholat: bacaan ditampilkan sekali, penghitung per waktu sholat
+    if (bCat === 'semua' || bCat === 'dzikir') {
+      var dz = ITEM.dzikir_subuh;
+      html += '<div class="read-group" id="r-setelah"><h2>Dzikir Setelah Sholat<small>5 waktu</small></h2>' +
+        dz.parts.map(function (p) { return '<div class="part"><span class="label">' + esc(p.label) + '</span><p class="lafaz">' + esc(p.lafaz) + '</p><p class="arti">' + esc(p.arti) + '</p>' + (p.note ? '<p class="note">' + esc(p.note) + '</p>' : '') + '</div>'; }).join('') +
+        '<div class="part"><span class="label">Buka penghitung 33×</span><div class="btn-row">' +
+        DZ_SHOLAT.map(function (id) { return '<button class="open-btn" data-open="' + id + '" data-date="' + tk + '">' + esc(ITEM[id].name.replace('Dzikir setelah ', '')) + '</button>'; }).join('') + '</div></div></div>';
+    }
     $('view-bacaan').innerHTML = html;
   }
 
@@ -624,6 +642,7 @@
       if (!$('sheet').hidden) { $('sheet').hidden = true; document.body.style.overflow = ''; sheetCtx = null; }
       gTab = el.dataset.guide; save('ah-gtab', gTab); if (el.dataset.sholat) gSholat = el.dataset.sholat; go('panduan'); return;
     }
+    if (el.dataset.bcat) { bCat = el.dataset.bcat; save('ah-bcat', bCat); renderBacaan(); window.scrollTo(0, 0); return; }
     if (el.dataset.gtab) { gTab = el.dataset.gtab; save('ah-gtab', gTab); renderPanduan(); return; }
     if (el.dataset.sholat) { gSholat = el.dataset.sholat; renderPanduanKeep(); return; }
     if (el.id === 'hafal-mode') { hafalMode = !hafalMode; revealed = {}; renderPanduanKeep(); return; }
@@ -691,7 +710,7 @@
   function route() {
     var h = (location.hash || '').replace('#', '');
     var g = GROUPS.filter(function (x) { return x.id === h; })[0];
-    if (g) { if (!$('sheet').hidden) closeSheet(); go('bacaan', false); var el = $('r-' + g.id); if (el) el.scrollIntoView(); return; }
+    if (g) { if (!$('sheet').hidden) closeSheet(); bCat = 'semua'; go('bacaan', false); var el = $('r-' + g.id); if (el) el.scrollIntoView(); return; }
     go(['today', 'bacaan', 'panduan', 'riwayat', 'settings'].indexOf(h) >= 0 ? h : view);
   }
   window.addEventListener('hashchange', route);

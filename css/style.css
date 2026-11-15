@@ -240,3 +240,10 @@ body.is-locked { overflow: hidden; }
 .key:active { background: var(--gold); color: #000; }
 .key.del { background: none; border-color: transparent; font-family: var(--body); font-size: 24px; color: var(--muted); }
 .lock .btn { max-width: 300px; }
+
+/* kategori bacaan */
+.cat-bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  margin: 0 -18px 4px; padding: 8px 18px 10px; background: linear-gradient(var(--bg) 80%, transparent); }
+.cat-bar::-webkit-scrollbar { display: none; }
+.cat-bar .chip { flex: none; font-size: 14.5px; padding: 8px 16px; }
+.cat-bar .chip.on { background: var(--gold); color: #000; border-color: var(--gold); font-weight: 700; }
