@@ -320,10 +320,70 @@
     if (it.group === 'harian') return 'lainnya';
     return 'sholat';
   }
+  // ---------- audio: rekaman qari untuk ayat Al-Qur'an, YouTube untuk doa lainnya ----------
+  var QURAN = { fatihah: [[1, 1, 7]], ikhlas: [[112, 1, 4]], falaq: [[113, 1, 5]], nas: [[114, 1, 6]], kafirun: [[109, 1, 6]],
+    dz_kursi: [[2, 255, 255]], seribu_dinar: [[65, 2, 3]], doa_yunus: [[21, 87, 87]], doa_sapu_jagat: [[2, 201, 201]], kahfi: [[18, 1, 110]] };
+  var QNOTE = { seribu_dinar: 'Audio memutar ayat 2–3 lengkap; bacaan amalan dimulai dari "wa may yattaqillaah".',
+    doa_yunus: 'Audio memutar ayat 87 lengkap; doanya ada di bagian akhir ayat.',
+    doa_sapu_jagat: 'Audio memutar ayat 201 lengkap; doanya dimulai dari "robbanaa".' };
+  function pad3(n) { return ('00' + n).slice(-3); }
+  function ayahList(key) { var out = []; QURAN[key].forEach(function (r) { for (var a = r[1]; a <= r[2]; a++) out.push(pad3(r[0]) + pad3(a)); }); return out; }
+  var player = { audio: null, key: null, list: [], i: 0, label: '', repeat: load('ah-repeat', false) };
+  function playKey(key, label) {
+    stopAudio(true);
+    player.key = key; player.list = ayahList(key); player.i = 0; player.label = label;
+    playCur(); markPlay();
+  }
+  function playCur() {
+    var id = player.list[player.i], a = player.audio || (player.audio = new Audio());
+    a._fb = false;
+    a.onended = function () {
+      player.i++;
+      if (player.i >= player.list.length) { if (player.repeat) player.i = 0; else { stopAudio(); return; } }
+      playCur();
+    };
+    a.onerror = function () {
+      if (!a._fb) { a._fb = true; a.src = 'https://verses.quran.com/Alafasy/mp3/' + id + '.mp3'; a.play().catch(function () {}); }
+      else { toast('Audio tidak bisa diputar. Cek sambungan internet.'); stopAudio(); }
+    };
+    a.src = 'https://everyayah.com/data/Alafasy_128kbps/' + id + '.mp3';
+    a.play().catch(function () {});
+    renderPlayer();
+  }
+  function stopAudio(quiet) {
+    if (player.audio) { player.audio.onended = null; player.audio.onerror = null; player.audio.pause(); }
+    player.key = null; if (!quiet) { renderPlayer(); markPlay(); }
+  }
+  function renderPlayer() {
+    var el = $('player'); if (!el) return;
+    if (!player.key) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = '<div class="pl-info"><b>' + esc(player.label) + '</b><span>Mishary Alafasy' + (player.list.length > 1 ? ' · ayat ' + (player.i + 1) + '/' + player.list.length : '') + '</span></div>' +
+      '<button class="pl-btn' + (player.repeat ? ' on' : '') + '" id="pl-repeat" aria-pressed="' + player.repeat + '">🔁 Ulangi</button>' +
+      '<button class="pl-btn" id="pl-stop" aria-label="Berhenti">■</button>';
+  }
+  function markPlay() {
+    document.querySelectorAll('[data-play]').forEach(function (b) {
+      var on = b.dataset.play === player.key; b.classList.toggle('playing', on); b.textContent = on ? '■ Berhenti' : '▶ Putar';
+    });
+  }
+  function ytUrl(label, lafaz) {
+    var words = String(lafaz || '').replace(/[^A-Za-z' -]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 5).join(' ');
+    var lab = String(label || '').replace(/\(.*?\)/g, '').replace(/[·:].*$/, '').replace(/\d+×/g, '').trim();
+    return 'https://www.youtube.com/results?search_query=' + encodeURIComponent((lab + ' ' + words).trim());
+  }
+  function audioRow(qkey, label, lafaz) {
+    if (qkey && QURAN[qkey]) return '<div class="audio-row"><button class="audio-btn" data-play="' + qkey + '" data-label="' + esc(label) + '">' + (player.key === qkey ? '■ Berhenti' : '▶ Putar') + '</button>' +
+      '<span class="audio-hint">' + esc(QNOTE[qkey] || 'Rekaman qari Mishary Alafasy') + '</span></div>';
+    return '<div class="audio-row"><a class="audio-btn yt" href="' + ytUrl(label, lafaz) + '" target="_blank" rel="noopener">▶ Dengarkan di YouTube</a></div>';
+  }
+  function qkeyFor(it, idx) { return idx === 0 && QURAN[it.id] ? it.id : null; }
+
   function partHtml(it, p, idx, last, tk, today) {
     return '<div class="part"><span class="label">' + esc(p.label) + (it.rakaat && idx === 0 ? ' · ' + esc(it.rakaat) : '') + '</span>' +
       (it.id === 'sedekah' || it.id === 'kahfi' ? '' : '<p class="lafaz">' + esc(p.lafaz) + '</p>') +
       '<p class="arti">' + esc(p.arti) + '</p>' + (p.note ? '<p class="note">' + esc(p.note) + '</p>' : '') +
+      (it.id === 'sedekah' ? '' : audioRow(qkeyFor(it, idx), it.id === 'kahfi' ? 'Surat Al-Kahfi' : p.label, p.lafaz)) +
       (last ? '<div class="btn-row">' +
         (today ? '<button class="open-btn" data-open="' + it.id + '" data-date="' + tk + '">' + (it.count ? 'Buka penghitung' : 'Buka') + '</button>' : '') +
         (it.link ? '<a class="open-btn" href="' + it.link + '" target="_blank" rel="noopener">Buka surat (latin + arti)</a>' : '') +
@@ -351,7 +411,7 @@
     if (bCat === 'semua' || bCat === 'dzikir') {
       var dz = ITEM.dzikir_subuh;
       html += '<div class="read-group" id="r-setelah"><h2>Dzikir Setelah Sholat<small>5 waktu</small></h2>' +
-        dz.parts.map(function (p) { return '<div class="part"><span class="label">' + esc(p.label) + '</span><p class="lafaz">' + esc(p.lafaz) + '</p><p class="arti">' + esc(p.arti) + '</p>' + (p.note ? '<p class="note">' + esc(p.note) + '</p>' : '') + '</div>'; }).join('') +
+        dz.parts.map(function (p, i) { return '<div class="part"><span class="label">' + esc(p.label) + '</span><p class="lafaz">' + esc(p.lafaz) + '</p><p class="arti">' + esc(p.arti) + '</p>' + (p.note ? '<p class="note">' + esc(p.note) + '</p>' : '') + audioRow(i === 2 ? 'dz_kursi' : null, i === 2 ? 'Ayat Kursi' : p.label, p.lafaz) + '</div>'; }).join('') +
         '<div class="part"><span class="label">Buka penghitung 33×</span><div class="btn-row">' +
         DZ_SHOLAT.map(function (id) { return '<button class="open-btn" data-open="' + id + '" data-date="' + tk + '">' + esc(ITEM[id].name.replace('Dzikir setelah ', '')) + '</button>'; }).join('') + '</div></div></div>';
     }
@@ -369,6 +429,7 @@
       '<p class="lafaz" data-reveal="' + key + '">' + esc(r.lafaz) + '</p>' +
       (blur ? '<p class="note">Ketuk untuk melihat bacaan</p>' : '') +
       '<p class="arti">' + esc(r.arti) + '</p>' + (r.note ? '<p class="note">' + esc(r.note) + '</p>' : '') +
+      audioRow(QURAN[key] ? key : null, QURAN[key] ? r.label : 'bacaan ' + r.label, r.lafaz) +
       (canHafal ? '<button class="hafal-btn' + (hafal(key) ? ' on' : '') + '" data-hafal="' + key + '">' + (hafal(key) ? '✓ Sudah hafal' : 'Tandai sudah hafal') + '</button>' : '') + '</div>';
   }
   function renderPanduan() {
@@ -391,7 +452,7 @@
         steps.forEach(function (sid) {
           var g = G.GERAK[sid], body = '';
           if (sid === 'niat') {
-            if (sh.item) { var p = ITEM[sh.item].parts[0]; body = '<div class="read"><p class="lafaz">' + esc(p.lafaz) + '</p><p class="arti">' + esc(p.arti) + '</p></div>'; }
+            if (sh.item) { var p = ITEM[sh.item].parts[0]; body = '<div class="read"><p class="lafaz">' + esc(p.lafaz) + '</p><p class="arti">' + esc(p.arti) + '</p>' + audioRow(null, p.label, '') + '</div>'; }
             else body = '<p class="note">Niat sesuai sholat sunnah yang dikerjakan (lihat tab Bacaan).</p>';
           } else if (g.surat) {
             body = ['ikhlas', 'falaq', 'nas', 'kafirun'].map(function (s) {
@@ -544,6 +605,7 @@
     if (view === 'panduan') renderPanduan();
     if (view === 'riwayat') renderRiwayat();
     if (view === 'settings') renderSettings();
+    markPlay();
   }
   function go(v, scroll) {
     view = v; render();
@@ -568,10 +630,12 @@
     var it = itemDef(k, id); sheetCtx = { type: 'item', id: id, date: k };
     var done = isDone(k, id), g = groupOf(id), isToday = k === todayKey();
     var html = '<div class="eyebrow" id="sheet-title">' + esc(g.title) + ' · ' + esc(it.name) + (it.rakaat ? ' · ' + esc(it.rakaat) : '') + (isToday ? '' : ' · ' + esc(longDate(parse(k)))) + '</div>';
-    it.parts.forEach(function (p) {
+    it.parts.forEach(function (p, i) {
+      var qk = it.phases ? (i === 2 ? 'dz_kursi' : null) : qkeyFor(it, i);
       html += '<div class="part">' + (it.parts.length > 1 ? '<span class="label">' + esc(p.label) + '</span>' : '') +
         (it.id === 'kahfi' || it.id === 'sedekah' ? '<p class="lafaz">' + esc(p.label) + '</p>' : '<p class="lafaz">' + esc(p.lafaz) + '</p>') +
-        '<p class="arti">' + esc(p.arti) + '</p>' + (p.note ? '<p class="note">' + esc(p.note) + '</p>' : '') + '</div>';
+        '<p class="arti">' + esc(p.arti) + '</p>' + (p.note ? '<p class="note">' + esc(p.note) + '</p>' : '') +
+        (it.id === 'sedekah' || (it.phases && i === 3) ? '' : audioRow(qk, qk === 'dz_kursi' ? 'Ayat Kursi' : it.id === 'kahfi' ? 'Surat Al-Kahfi' : p.label, p.lafaz)) + '</div>';
     });
     if (it.count && isToday) {
       var c = (counts[k] && counts[k][id]) || 0;
@@ -642,6 +706,9 @@
       if (!$('sheet').hidden) { $('sheet').hidden = true; document.body.style.overflow = ''; sheetCtx = null; }
       gTab = el.dataset.guide; save('ah-gtab', gTab); if (el.dataset.sholat) gSholat = el.dataset.sholat; go('panduan'); return;
     }
+    if (el.dataset.play) { if (player.key === el.dataset.play) stopAudio(); else playKey(el.dataset.play, el.dataset.label || ''); return; }
+    if (el.id === 'pl-stop') { stopAudio(); return; }
+    if (el.id === 'pl-repeat') { player.repeat = !player.repeat; save('ah-repeat', player.repeat); renderPlayer(); return; }
     if (el.dataset.bcat) { bCat = el.dataset.bcat; save('ah-bcat', bCat); renderBacaan(); window.scrollTo(0, 0); return; }
     if (el.dataset.gtab) { gTab = el.dataset.gtab; save('ah-gtab', gTab); renderPanduan(); return; }
     if (el.dataset.sholat) { gSholat = el.dataset.sholat; renderPanduanKeep(); return; }
