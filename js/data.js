@@ -2,6 +2,8 @@
 (function (root) {
   // start/end: fungsi yang menerima jadwal sholat hari itu (menit) dan mengembalikan menit
   var GROUPS = [
+    { id: 'doa', title: 'Doa & Istighfar', when: function () { return 'kapan saja'; },
+      start: function () { return 0; }, end: function () { return 1440; } },
     { id: 'malam', title: 'Taubat & Tahajud', when: function () { return '03.45'; },
       start: function () { return 0; }, end: function (t) { return t.subuh; } },
     { id: 'puasa', title: 'Puasa Sunnah', when: function () { return 'sampai Maghrib'; },
@@ -10,8 +12,6 @@
       start: function (t) { return t.subuh; }, end: function (t) { return t.terbit; } },
     { id: 'dzikir', title: 'Dzikir Pagi', when: function () { return 'setelah Subuh'; },
       start: function (t) { return t.subuh; }, end: function (t) { return t.zuhur; } },
-    { id: 'doa', title: 'Doa & Istighfar', when: function () { return 'kapan saja'; },
-      start: function () { return 0; }, end: function () { return 1440; } },
     { id: 'dhuha', title: 'Dhuha', when: function (t) { return Prayer.hhmm(t.dhuha); },
       start: function (t) { return t.dhuha; }, end: function (t) { return t.zuhur; } },
     { id: 'zuhur', title: 'Zuhur', fridayTitle: 'Jumat', when: function (t) { return Prayer.hhmm(t.zuhur); },
